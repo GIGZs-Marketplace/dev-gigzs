@@ -16,13 +16,12 @@ import {
 import PostJob from './PostJob'
 import ProjectList from './ProjectList'
 import FreelancerList from './FreelancerList'
-import TeamManagement from './TeamManagement'
 import ContractManagement from './ContractManagement'
 import RatingsReviews from './RatingsReviews'
 import ContractSigning from './ContractSigning'
 import TeamCollaboration from './TeamCollaboration'
 
-type TabType = 'projects' | 'freelancers' | 'team' | 'contracts' | 'reviews' | 'signing' | 'collaboration'
+type TabType = 'projects' | 'freelancers' | 'team' | 'contracts' | 'reviews' | 'signing'
 
 function ClientDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('projects')
@@ -127,8 +126,7 @@ function ClientDashboard() {
           {[
             { id: 'projects', label: 'Projects', icon: FileText },
             { id: 'freelancers', label: 'Freelancers', icon: Users },
-            { id: 'team', label: 'Team', icon: Users },
-            { id: 'collaboration', label: 'Team Collaboration', icon: UserPlus },
+            { id: 'team', label: 'Team', icon: UserPlus },
             { id: 'contracts', label: 'Contracts', icon: FileText },
             { id: 'signing', label: 'Contract Signing', icon: FileSignature },
             { id: 'reviews', label: 'Reviews', icon: Star }
@@ -152,8 +150,7 @@ function ClientDashboard() {
         <div className="p-6">
           {activeTab === 'projects' && <ProjectList />}
           {activeTab === 'freelancers' && <FreelancerList />}
-          {activeTab === 'team' && <TeamManagement />}
-          {activeTab === 'collaboration' && <TeamCollaboration />}
+          {activeTab === 'team' && <TeamCollaboration />}
           {activeTab === 'contracts' && <ContractManagement />}
           {activeTab === 'signing' && <ContractSigning />}
           {activeTab === 'reviews' && <RatingsReviews />}
