@@ -43,22 +43,56 @@ function Reviews() {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
-      console.log('Current user id:', user.id);
+      
+      // First get the freelancer profile using user_id
+      const { data: freelancerProfile, error: profileError } = await supabase
+        .from('freelancer_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
 
-      const { data: reviewsWithJobs, error: jobsJoinError } = await supabase
-        .from('Reviews_freelancer')
-        .select(`*, jobs ( title )`)
-        .eq('freelancer_id', user.id)
-        .order('created_at', { ascending: false });
-      console.log('Join jobs:', { reviewsWithJobs, jobsJoinError });
-      if (jobsJoinError) throw jobsJoinError;
-      const normalizedReviews = (reviewsWithJobs || []).map((review: any) => ({
+      if (profileError) throw profileError;
+      if (!freelancerProfile) throw new Error('Freelancer profile not found');
+
+      // Get reviews without joining jobs
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews_freelancer')
+        .select(`
+          id,
+          created_at,
+          duration,
+          value,
+          completed,
+          skills_used,
+          job_id
+        `)
+        .eq('freelancer_id', freelancerProfile.id);
+
+      if (reviewsError) throw reviewsError;
+
+      // Fetch job titles separately
+      const jobIds = reviewsData.map((review: any) => review.job_id);
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select('id, title')
+        .in('id', jobIds);
+
+      if (jobsError) throw jobsError;
+
+      const jobMap = jobsData.reduce((acc: any, job: any) => {
+        acc[job.id] = job.title;
+        return acc;
+      }, {});
+
+      const normalizedReviews = (reviewsData || []).map((review: any) => ({
         ...review,
-        project_title: review.jobs?.title || 'Project',
+        project_title: jobMap[review.job_id] || 'Project'
       }));
+
       setReviews(normalizedReviews);
 
     } catch (err) {
+      console.error('Load reviews error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred loading reviews')
     } finally {
       setLoading(false)
@@ -78,7 +112,7 @@ function Reviews() {
       setError(null)
 
       const { error: updateError } = await supabase
-        .from('Reviews_freelancer')
+        .from('reviews_freelancer')
         .update({
           duration: editForm.duration,
           value: editForm.value,

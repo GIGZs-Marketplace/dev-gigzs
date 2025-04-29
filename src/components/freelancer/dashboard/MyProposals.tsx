@@ -48,7 +48,9 @@ interface JobApplication {
   }
 }
 
-function MyProposals() {
+// Add sectionState prop
+type MyProposalsProps = { sectionState?: any }
+function MyProposals({ sectionState }: MyProposalsProps) {
   const [proposals, setProposals] = useState<JobApplication[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -62,12 +64,20 @@ function MyProposals() {
     cover_letter: '',
     proposed_rate: 0
   })
-  const [submitting, setSubmitting] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Open modal and prefill job if jobId is passed in sectionState
+  useEffect(() => {
+    if (sectionState && sectionState.jobId) {
+      setIsModalOpen(true);
+      setNewProposal((prev) => ({ ...prev, job_id: sectionState.jobId }));
+    }
+    // eslint-disable-next-line
+  }, [sectionState]);
 
   const checkAuth = async () => {
     try {
@@ -147,17 +157,32 @@ function MyProposals() {
         return
       }
 
-      // Transform the data to match the JobApplication interface
-      const transformedProposals = proposalsData?.map(proposal => ({
-        ...proposal,
-        job: {
-          ...proposal.job[0], // Take the first job since it's returned as an array
-          client: proposal.job[0]?.client[0] // Take the first client since it's returned as an array
+      // Safe transformation of proposals data
+      const transformedProposals = proposalsData?.map(proposal => {
+        // Safely extract job data
+        const jobData = proposal.job?.[0] || proposal.job || {}
+        
+        // Safely extract client data
+        const clientData = jobData.client?.[0] || jobData.client || {}
+        
+        return {
+          ...proposal,
+          job: {
+            title: jobData.title || '',
+            description: jobData.description || '',
+            client_id: jobData.client_id || '',
+            budget_amount: jobData.budget_amount || 0,
+            budget_type: jobData.budget_type || '',
+            duration: jobData.duration || '',
+            client: {
+              company_name: clientData.company_name || ''
+            }
+          }
         }
-      })) || []
+      }) || []
 
+      console.log('Transformed proposals:', transformedProposals);
       setProposals(transformedProposals)
-      console.log('Set proposals to:', transformedProposals)
     } catch (error) {
       console.error('Error in fetchProposals:', error)
     } finally {
@@ -216,7 +241,6 @@ function MyProposals() {
   const createProposal = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      setSubmitting(true)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         alert('Please sign in to create a proposal')
@@ -261,8 +285,6 @@ function MyProposals() {
     } catch (error) {
       console.error('Error creating proposal:', error)
       alert('Failed to create proposal. Please try again.')
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -467,6 +489,64 @@ function MyProposals() {
           ))
         )}
       </div>
+
+      {/* Add Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Create New Proposal</h2>
+            <form onSubmit={createProposal}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Job</label>
+                  <select
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    value={newProposal.job_id}
+                    onChange={(e) => setNewProposal({...newProposal, job_id: e.target.value})}
+                  >
+                    <option value="">Select a job</option>
+                    {availableJobs.map(job => (
+                      <option key={job.id} value={job.id}>{job.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Cover Letter</label>
+                  <textarea
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    value={newProposal.cover_letter}
+                    onChange={(e) => setNewProposal({...newProposal, cover_letter: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Proposed Rate</label>
+                  <input
+                    type="number"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    value={newProposal.proposed_rate}
+                    onChange={(e) => setNewProposal({...newProposal, proposed_rate: Number(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#00704A] rounded-md hover:bg-[#005538]"
+                >
+                  Submit Proposal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

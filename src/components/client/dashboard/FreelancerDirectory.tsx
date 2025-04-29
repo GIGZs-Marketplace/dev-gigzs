@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Search, Filter, Star, MapPin, Briefcase, ChevronDown, MessageSquare, ExternalLink, Users, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { useNavigate } from 'react-router-dom';
 
 interface Freelancer {
   id: string
@@ -25,6 +26,7 @@ function FreelancerDirectory() {
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadFreelancers()
@@ -229,7 +231,13 @@ function FreelancerDirectory() {
               </div>
 
               <div className="mt-5 flex space-x-2">
-                <button className="flex-1 px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center justify-center shadow-sm hover:shadow">
+                <button
+                  className="flex-1 px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center justify-center shadow-sm hover:shadow"
+                  onClick={() => {
+                    // Use freelancer.id as user_id, adjust if needed
+                    navigate(`/messages?userId=${freelancer.id}`);
+                  }}
+                >
                   <MessageSquare size={18} className="mr-2" />
                   Contact
                 </button>

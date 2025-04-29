@@ -73,6 +73,15 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [freelancerName, setFreelancerName] = useState('')
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 1, message: 'New message from client', isRead: false },
+    { id: 2, message: 'Project deadline approaching', isRead: false },
+    { id: 3, message: 'Payment received', isRead: true }
+  ]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [profileImageUrl, setProfileImageUrl] = useState('');
+  const [sectionState, setSectionState] = useState<any>(null);
 
   
   useEffect(() => {
@@ -81,8 +90,36 @@ function App() {
       const { data: { user } } = await supabase.auth.getUser();
       setIsAuthenticated(!!user);
       setSessionChecked(true);
+      if (user) {
+        // Detect user type on refresh
+        const { data: freelancerProfile } = await supabase
+          .from('freelancer_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const { data: clientProfile } = await supabase
+          .from('client_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (freelancerProfile) {
+          setUserType('freelancer');
+        } else if (clientProfile) {
+          setUserType('client');
+        }
+      }
     };
     checkSession();
+
+    // Listen for custom navigation events
+    const handler = (e: any) => {
+      if (e.detail && e.detail.section) {
+        setActiveSection(e.detail.section);
+        setSectionState(e.detail);
+      }
+    };
+    window.addEventListener('navigate', handler);
+    return () => window.removeEventListener('navigate', handler);
   }, []);
 
   useEffect(() => {
@@ -121,6 +158,25 @@ function App() {
   useEffect(() => {
     loadFreelancerProfile()
   }, [])
+
+  useEffect(() => {
+    const fetchProfileImage = async () => {
+      try {
+        const { data } = await supabase
+          .storage
+          .from('avatars')
+          .getPublicUrl('path/to/profile-image.jpg'); // Update with the correct path
+
+        if (!data) throw new Error('Failed to fetch public URL');
+
+        setProfileImageUrl(data.publicUrl);
+      } catch (error) {
+        console.error('Error fetching profile image:', (error as Error).message);
+      }
+    };
+
+    fetchProfileImage();
+  }, []);
 
   const loadFreelancerProfile = async () => {
     try {
@@ -222,6 +278,10 @@ function App() {
     }
   }
 
+  const toggleNotifications = () => {
+    setIsNotificationsOpen(!isNotificationsOpen);
+  };
+
   if (!sessionChecked) {
     // Don't show login/signup until session check is complete
     return null;
@@ -255,6 +315,18 @@ function App() {
     return <FreelancerOnboarding onComplete={() => setOnboardingStatus('complete')} />;
   }
 
+  // Conditional rendering for upload details page
+  if (!profileImageUrl) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold mb-4">Upload Your Profile Picture</h2>
+          <p className="mb-4">Please upload a profile picture to proceed.</p>
+          {/* Add upload component or logic here */}
+        </div>
+      </div>
+    );
+  }
 
   const freelancerMenuSections = [
     {
@@ -354,7 +426,7 @@ function App() {
       case 'jobs':
         return <FindJobs />
       case 'proposals':
-        return <MyProposals />
+        return <MyProposals sectionState={sectionState} />
       case 'contracts':
         return <Contracts />
       case 'projects':
@@ -489,19 +561,39 @@ function App() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <button className="p-2 hover:bg-gray-100 rounded-lg relative">
-                <Bell size={20} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <div className="relative">
+                <button onClick={toggleNotifications} className="p-2 hover:bg-gray-100 rounded-lg relative">
+                  <Bell size={20} />
+                  {notifications.some(n => !n.isRead) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+                </button>
+                {isNotificationsOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-20">
+                    {notifications.map(notification => (
+                      <a key={notification.id} href="#" onClick={() => setActiveSection('messages')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        {notification.message}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
               
-              <div className="flex items-center space-x-2">
-                <img
-                  src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full"
-                />
-                <span className="font-semibold">{freelancerName}</span>
-                <ChevronDown size={16} />
+              <div className="relative">
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center space-x-2">
+                  <img
+                    src={profileImageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80'}
+                    alt="Profile"
+                    className="w-8 h-8 rounded-full"
+                  />
+                  <span className="font-semibold">{freelancerName}</span>
+                  <ChevronDown size={16} />
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20">
+                    <a href="#" onClick={() => setActiveSection('profile')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
+                    <a href="#" onClick={() => setActiveSection('settings')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+                    <a href="#" onClick={() => setActiveSection('logout')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+                  </div>
+                )}
               </div>
             </div>
           </div>

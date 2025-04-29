@@ -75,6 +75,7 @@ function MyEarnings() {
         </div>
         <button
           className="flex items-center px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+          onClick={() => alert('Withdraw Funds action triggered!')}
         >
           <DollarSign size={20} className="mr-2" />
           Withdraw Funds
@@ -143,7 +144,9 @@ function MyEarnings() {
             </button>
           </div>
 
-          <button className="flex items-center px-4 py-2 text-[#00704A] hover:bg-[#00704A]/5 rounded-lg">
+          <button className="flex items-center px-4 py-2 text-[#00704A] hover:bg-[#00704A]/5 rounded-lg"
+            onClick={() => alert('Export Report action triggered!')}
+          >
             <Download size={20} className="mr-2" />
             Export Report
           </button>

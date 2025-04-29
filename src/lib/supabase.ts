@@ -28,7 +28,7 @@ export interface Project {
 }
 
 // Function to create a new project
-export async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'client_id'>) {
+export async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'client_id'> & { freelancer_id?: string }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
@@ -45,7 +45,8 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
     .insert([
       {
         ...projectData,
-        client_id: clientProfile.id
+        client_id: clientProfile.id,
+        ...(projectData.freelancer_id ? { freelancer_id: projectData.freelancer_id } : {})
       }
     ])
     .select()
@@ -99,4 +100,22 @@ export async function fetchClientProjects() {
 
   if (error) throw error
   return data
+}
+
+// Function to update a job application's status
+export async function updateJobApplicationStatus(applicationId: string, status: 'pending' | 'shortlisted' | 'accepted' | 'rejected') {
+  const { error } = await supabase
+    .from('job_applications')
+    .update({ status })
+    .eq('id', applicationId)
+  if (error) throw error
+}
+
+// Function to assign a freelancer to a project and update status
+export async function assignFreelancerToProject(projectId: string, freelancerId: string) {
+  const { error } = await supabase
+    .from('projects')
+    .update({ freelancer_id: freelancerId, status: 'in_progress' })
+    .eq('id', projectId)
+  if (error) throw error
 }

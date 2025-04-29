@@ -230,7 +230,10 @@ function FindJobs() {
                 <div className="flex items-center space-x-4">
                   <span className="text-sm text-gray-500">Posted {new Date(job.created_at).toLocaleDateString()}</span>
                 </div>
-                <button className="px-6 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]">
+                <button
+                  className="px-6 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { section: 'proposals', jobId: job.id } }))}
+                >
                   Apply Now
                 </button>
               </div>

@@ -1,8 +1,16 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Mail, Lock, BellRing, Globe, Moon, Sun, Palette, User, Shield } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import ReactCrop, { Crop, PixelCrop, PercentCrop } from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile')
+  const [profilePic, setProfilePic] = useState('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80')
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [crop, setCrop] = useState<PixelCrop>({ x: 0, y: 0, width: 100, height: 100, unit: 'px' })
+  const [croppedImageUrl, setCroppedImageUrl] = useState('')
+  const [showCropModal, setShowCropModal] = useState(false)
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -11,6 +19,130 @@ function SettingsPage() {
     { id: 'appearance', label: 'Appearance', icon: Palette }
   ]
 
+  useEffect(() => {
+    const fetchProfilePic = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('freelancer_profiles')
+        .select('avatar_url')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile picture:', error);
+      } else {
+        setProfilePic(data.avatar_url);
+      }
+    };
+
+    fetchProfilePic();
+  }, []);
+
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    setSelectedImage(URL.createObjectURL(file));
+    setShowCropModal(true);
+  };
+
+  const handleCropComplete = (crop: PixelCrop, percentCrop: PercentCrop) => {
+    if (selectedImage && crop.width && crop.height) {
+      const image = new Image();
+      image.src = selectedImage;
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scaleX = image.naturalWidth / image.width;
+        const scaleY = image.naturalHeight / image.height;
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(
+            image,
+            crop.x * scaleX,
+            crop.y * scaleY,
+            crop.width * scaleX,
+            crop.height * scaleY,
+            0,
+            0,
+            crop.width,
+            crop.height
+          );
+          const base64Image = canvas.toDataURL('image/jpeg');
+          setCroppedImageUrl(base64Image);
+        }
+      };
+    }
+  };
+
+  const handleSaveCroppedImage = async () => {
+    try {
+      // Step 1: Fetch the cropped image from the URL
+      const response = await fetch(croppedImageUrl);
+      const blob = await response.blob();
+      const fileExt = 'jpeg';
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = fileName;
+  
+      // Step 2: Upload the cropped image to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob);
+  
+      if (uploadError) {
+        console.error('Error uploading file:', uploadError);
+        return;
+      }
+  
+      // Step 3: Get the public URL for the uploaded image
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+  
+      if (!publicUrlData) {
+        console.error('Public URL not found.');
+        return;
+      }
+  
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) {
+        console.error('Public URL not found.');
+        return;
+      }
+  
+      // Step 4: Set the profile picture with the valid URL
+      setProfilePic(publicUrl);
+  
+      // Step 5: Fetch the current user and update their profile
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Error fetching user:', userError);
+        return;
+      }
+  
+      const user = userData?.user;
+      if (!user) return;
+  
+      // Step 6: Update the user's profile with the new avatar URL
+      const { error: updateError } = await supabase
+        .from('freelancer_profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('user_id', user.id);
+  
+      if (updateError) {
+        console.error('Error updating profile:', updateError);
+      }
+  
+      // Close the crop modal after saving the image
+      setShowCropModal(false);
+    } catch (error) {
+      console.error('Unexpected error:', error);
+    }
+  };
+  
   return (
     <div className="bg-white rounded-lg border border-gray-200">
       {/* Settings Header */}
@@ -41,19 +173,46 @@ function SettingsPage() {
             
             <div className="flex items-center space-x-6">
               <img
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
+                src={profilePic}
                 alt="Profile"
                 className="w-24 h-24 rounded-full"
               />
               <div>
-                <button className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                  id="photo-upload"
+                />
+                <label htmlFor="photo-upload" className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] cursor-pointer">
                   Change Photo
-                </button>
+                </label>
                 <p className="mt-2 text-sm text-gray-500">
                   JPG, GIF or PNG. Max size of 2MB
                 </p>
               </div>
             </div>
+
+            {showCropModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+                <div className="bg-white p-6 rounded-lg shadow-lg w-80">
+                  <h2 className="text-lg font-medium text-gray-900 mb-4">Crop Photo</h2>
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(newCrop: PixelCrop) => setCrop(newCrop)}
+                    onComplete={handleCropComplete}
+                    circularCrop
+                  >
+                    <img src={selectedImage || ''} alt="Crop" className="max-w-full" />
+                  </ReactCrop>
+                  <div className="flex justify-end mt-4">
+                    <button onClick={() => setShowCropModal(false)} className="mr-2 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Cancel</button>
+                    <button onClick={handleSaveCroppedImage} className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]">Save</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-6">
               <div>

@@ -1,9 +1,37 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Users, Briefcase, DollarSign, Star, TrendingUp } from 'lucide-react'
 
 function Dashboard() {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Profile Dropdown */}
+      <div className="relative flex justify-end">
+        <button
+          onClick={toggleDropdown}
+          className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none"
+        >
+          <img
+            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
+            alt="Profile"
+            className="w-8 h-8 rounded-full"
+          />
+          <span>Profile</span>
+        </button>
+        {isDropdownOpen && (
+          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20">
+            <button onClick={() => alert('Profile clicked')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</button>
+            <button onClick={() => alert('Settings clicked')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</button>
+            <button onClick={() => alert('Logout clicked')} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
+          </div>
+        )}
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard

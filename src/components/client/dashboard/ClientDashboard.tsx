@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   PlusCircle, 
   Users, 
@@ -20,69 +20,87 @@ import ContractManagement from './ContractManagement'
 import RatingsReviews from './RatingsReviews'
 import ContractSigning from './ContractSigning'
 import TeamCollaboration from './TeamCollaboration'
+import ProposalList from './ProposalList'
+import { fetchClientProjects } from '../../../lib/supabase'
 
-type TabType = 'projects' | 'freelancers' | 'team' | 'contracts' | 'reviews' | 'signing'
+type TabType = 'projects' | 'freelancers' | 'team' | 'contracts' | 'reviews' | 'signing' | 'proposals'
 
 function ClientDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('projects')
   const [showPostJob, setShowPostJob] = useState(false)
+  const [loadingStats, setLoadingStats] = useState(true)
+  const [stats, setStats] = useState([
+    { title: 'Active Projects', value: '-', icon: FileText, trend: '', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+    { title: 'Hired Freelancers', value: '-', icon: Users, trend: '', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+    { title: 'Total Spent', value: '-', icon: DollarSign, trend: '', color: 'text-violet-600', bgColor: 'bg-violet-50' },
+    { title: 'Project Success Rate', value: '-', icon: BarChart, trend: '', color: 'text-amber-600', bgColor: 'bg-amber-50' }
+  ])
 
-  const stats = [
-    { 
-      title: 'Active Projects', 
-      value: '12', 
-      icon: FileText, 
-      trend: '+2.5%',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50' 
-    },
-    { 
-      title: 'Hired Freelancers', 
-      value: '8', 
-      icon: Users, 
-      trend: '+1.2%',
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50'
-    },
-    { 
-      title: 'Total Spent', 
-      value: '$24,500', 
-      icon: DollarSign, 
-      trend: '+12.3%',
-      color: 'text-violet-600',
-      bgColor: 'bg-violet-50'
-    },
-    { 
-      title: 'Project Success Rate', 
-      value: '94%', 
-      icon: BarChart, 
-      trend: '+3.2%',
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50'
+  useEffect(() => {
+    const fetchStats = async () => {
+      setLoadingStats(true)
+      try {
+        const projects = await fetchClientProjects()
+        // Active Projects: status 'open' or 'in_progress'
+        const activeProjects = projects.filter((p: any) => ['open', 'in_progress'].includes(p.status)).length
+        // Hired Freelancers: unique freelancer_id (not null)
+        const hiredFreelancers = new Set(projects.map((p: any) => p.freelancer_id).filter(Boolean)).size
+        // Total Spent: sum of budget_amount for completed projects
+        const totalSpent = projects
+          .filter((p: any) => p.status === 'completed')
+          .reduce((sum: number, p: any) => sum + (p.budget_amount || 0), 0)
+        // Project Success Rate: completed / total
+        const completed = projects.filter((p: any) => p.status === 'completed').length
+        const successRate = projects.length > 0 ? Math.round((completed / projects.length) * 100) : 0
+        setStats([
+          { title: 'Active Projects', value: String(activeProjects), icon: FileText, trend: '', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+          { title: 'Hired Freelancers', value: String(hiredFreelancers), icon: Users, trend: '', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+          { title: 'Total Spent', value: `$${totalSpent.toLocaleString()}`, icon: DollarSign, trend: '', color: 'text-violet-600', bgColor: 'bg-violet-50' },
+          { title: 'Project Success Rate', value: `${successRate}%`, icon: BarChart, trend: '', color: 'text-amber-600', bgColor: 'bg-amber-50' }
+        ])
+      } catch (e) {
+        setStats([
+          { title: 'Active Projects', value: '-', icon: FileText, trend: '', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+          { title: 'Hired Freelancers', value: '-', icon: Users, trend: '', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+          { title: 'Total Spent', value: '-', icon: DollarSign, trend: '', color: 'text-violet-600', bgColor: 'bg-violet-50' },
+          { title: 'Project Success Rate', value: '-', icon: BarChart, trend: '', color: 'text-amber-600', bgColor: 'bg-amber-50' }
+        ])
+      } finally {
+        setLoadingStats(false)
+      }
     }
-  ]
+    fetchStats()
+  }, [])
 
   return (
     <div className="space-y-8">
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <div 
-            key={index} 
-            className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-300"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
+        {loadingStats ? (
+          Array(4).fill(0).map((_, idx) => (
+            <div key={idx} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm animate-pulse h-32" />
+          ))
+        ) : (
+          stats.map((stat, index) => (
+            <div 
+              key={index} 
+              className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-300"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-3 rounded-lg ${stat.bgColor}`}>
+                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                </div>
+                {stat.trend && (
+                  <span className="text-sm font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                    {stat.trend}
+                  </span>
+                )}
               </div>
-              <span className="text-sm font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                {stat.trend}
-              </span>
+              <h3 className="text-gray-500 text-sm font-medium">{stat.title}</h3>
+              <p className="text-2xl font-semibold mt-2 text-gray-800">{stat.value}</p>
             </div>
-            <h3 className="text-gray-500 text-sm font-medium">{stat.title}</h3>
-            <p className="text-2xl font-semibold mt-2 text-gray-800">{stat.value}</p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Main Actions */}
@@ -129,7 +147,8 @@ function ClientDashboard() {
             { id: 'team', label: 'Team', icon: UserPlus },
             { id: 'contracts', label: 'Contracts', icon: FileText },
             { id: 'signing', label: 'Contract Signing', icon: FileSignature },
-            { id: 'reviews', label: 'Reviews', icon: Star }
+            { id: 'reviews', label: 'Reviews', icon: Star },
+            { id: 'proposals', label: 'Proposals', icon: DollarSign },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -154,6 +173,7 @@ function ClientDashboard() {
           {activeTab === 'contracts' && <ContractManagement />}
           {activeTab === 'signing' && <ContractSigning />}
           {activeTab === 'reviews' && <RatingsReviews />}
+          {activeTab === 'proposals' && <ProposalList />}
         </div>
       </div>
 
