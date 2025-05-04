@@ -1,31 +1,9 @@
-/*
-  # Create profiles tables for freelancers and clients
-
-  1. New Tables
-    - `freelancer_profiles`
-      - `id` (uuid, primary key)
-      - `user_id` (uuid, references auth.users)
-      - `full_name` (text)
-      - `professional_title` (text)
-      - `hourly_rate` (numeric)
-      - `skills` (text[])
-      - `created_at` (timestamp)
-    
-    - `client_profiles`
-      - `id` (uuid, primary key)
-      - `user_id` (uuid, references auth.users)
-      - `company_name` (text)
-      - `industry` (text)
-      - `company_size` (text)
-      - `created_at` (timestamp)
-
-  2. Security
-    - Enable RLS on both tables
-    - Add policies for authenticated users to read/write their own data
-*/
+-- Drop existing tables and policies
+DROP TABLE IF EXISTS freelancer_profiles CASCADE;
+DROP TABLE IF EXISTS client_profiles CASCADE;
 
 -- Create freelancer profiles table
-CREATE TABLE IF NOT EXISTS freelancer_profiles (
+CREATE TABLE freelancer_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES auth.users NOT NULL,
   full_name text,
@@ -37,7 +15,7 @@ CREATE TABLE IF NOT EXISTS freelancer_profiles (
 );
 
 -- Create client profiles table
-CREATE TABLE IF NOT EXISTS client_profiles (
+CREATE TABLE client_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES auth.users NOT NULL,
   company_name text,
@@ -99,4 +77,4 @@ CREATE POLICY "Users can insert own client profile"
 CREATE POLICY "Service role can manage client profiles"
   ON client_profiles
   USING (auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.jwt() ->> 'role' = 'service_role');
+  WITH CHECK (auth.jwt() ->> 'role' = 'service_role'); 

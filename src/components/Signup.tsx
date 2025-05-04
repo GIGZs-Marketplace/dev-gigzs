@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { User, Mail, Lock, Briefcase, AlertCircle } from 'lucide-react'
-import { supabase, UserType } from '../lib/supabase'
+import { supabase, supabaseAdmin, UserType } from '../lib/supabase'
 
 interface SignupProps {
   onSwitch: () => void
@@ -52,6 +52,12 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
       const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name,
+            account_type: formData.accountType
+          }
+        }
       })
 
       if (signUpError) {
@@ -63,34 +69,63 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
 
       if (!user) throw new Error('Failed to create account')
 
-      // Create profile based on account type
-      if (formData.accountType === 'freelancer') {
-        const { error: profileError } = await supabase
-          .from('freelancer_profiles')
-          .insert([
-            {
-              user_id: user.id,
-              full_name: formData.name,
-            }
-          ])
-        if (profileError) throw profileError
-      } else {
-        const { error: profileError } = await supabase
-          .from('client_profiles')
-          .insert([
-            {
-              user_id: user.id,
-              company_name: formData.name,
-            }
-          ])
-        if (profileError) throw profileError
+      // Sign in the user to establish the session
+      const { error: signInAfterSignUpError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (signInAfterSignUpError) {
+        throw new Error('Failed to sign in after account creation')
       }
 
-      onSuccess(formData.accountType)
+      // Get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) throw sessionError
+      if (!session) throw new Error('No session established')
+
+      // Create profile based on account type using admin client
+      try {
+        if (formData.accountType === 'freelancer') {
+          const { error: profileError } = await supabaseAdmin
+            .from('freelancer_profiles')
+            .insert([
+              {
+                user_id: user.id,
+                full_name: formData.name,
+              }
+            ])
+            .select()
+          if (profileError) {
+            console.error('Error creating freelancer profile:', profileError)
+            throw new Error('Failed to create freelancer profile')
+          }
+        } else {
+          const { error: profileError } = await supabaseAdmin
+            .from('client_profiles')
+            .insert([
+              {
+                user_id: user.id,
+                company_name: formData.name,
+              }
+            ])
+            .select()
+          if (profileError) {
+            console.error('Error creating client profile:', profileError)
+            throw new Error('Failed to create client profile')
+          }
+        }
+        
+        onSuccess(formData.accountType)
+      } catch (profileErr) {
+        // If profile creation fails, delete the user to maintain consistency
+        await supabase.auth.admin.deleteUser(user.id)
+        throw profileErr
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      console.error('Signup error:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred during signup')
       if (err instanceof Error && err.message.includes('already exists')) {
-        // If user already exists, show the login form
         setTimeout(() => onSwitch(), 2000)
       }
     } finally {
@@ -177,11 +212,13 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
                 onChange={(e) => setFormData({ ...formData, accountType: e.target.value as UserType })}
                 className="sr-only"
               />
-              <div className={`p-4 border rounded-lg text-center cursor-pointer transition-colors ${
-                formData.accountType === 'freelancer' ? 'border-[#00704A] bg-[#00704A]/10' : 'border-gray-300'
-              }`}>
+              <div className={`
+                p-4 border rounded-lg cursor-pointer text-center
+                ${formData.accountType === 'freelancer' ? 'bg-[#00704A] text-white' : 'bg-gray-100 text-gray-700'}
+                hover:bg-[#00704A] hover:text-white transition-colors
+              `}>
                 <Briefcase className="mx-auto mb-2" size={24} />
-                <span className="font-medium">Freelancer</span>
+                <span>Freelancer</span>
               </div>
             </label>
             <label className="flex-1">
@@ -193,11 +230,13 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
                 onChange={(e) => setFormData({ ...formData, accountType: e.target.value as UserType })}
                 className="sr-only"
               />
-              <div className={`p-4 border rounded-lg text-center cursor-pointer transition-colors ${
-                formData.accountType === 'client' ? 'border-[#00704A] bg-[#00704A]/10' : 'border-gray-300'
-              }`}>
-                <User className="mx-auto mb-2" size={24} />
-                <span className="font-medium">Client</span>
+              <div className={`
+                p-4 border rounded-lg cursor-pointer text-center
+                ${formData.accountType === 'client' ? 'bg-[#00704A] text-white' : 'bg-gray-100 text-gray-700'}
+                hover:bg-[#00704A] hover:text-white transition-colors
+              `}>
+                <Briefcase className="mx-auto mb-2" size={24} />
+                <span>Client</span>
               </div>
             </label>
           </div>
@@ -206,18 +245,22 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-[#00704A] text-white py-2 rounded-lg hover:bg-[#005538] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-[#00704A] text-white py-2 px-4 rounded-lg hover:bg-[#005C3E] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Creating Account...' : 'Create Account'}
         </button>
-      </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
-        Already have an account?{' '}
-        <button onClick={onSwitch} className="text-[#00704A] hover:underline">
-          Sign in
-        </button>
-      </p>
+        <p className="text-center text-sm text-gray-600">
+          Already have an account?{' '}
+          <button
+            type="button"
+            onClick={onSwitch}
+            className="text-[#00704A] hover:underline"
+          >
+            Sign in
+          </button>
+        </p>
+      </form>
     </div>
   )
 }
