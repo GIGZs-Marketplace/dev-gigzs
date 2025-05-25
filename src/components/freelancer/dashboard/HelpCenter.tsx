@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Search, 
   HelpCircle, 
@@ -7,7 +7,7 @@ import {
   ChevronDown, 
   ChevronRight,
   Send,
-  Plus,
+  Mail,
   AlertCircle,
   CheckCircle
 } from 'lucide-react'
@@ -15,9 +15,93 @@ import {
 function HelpCenter() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [showTicketForm, setShowTicketForm] = useState(false)
-  const [chatMessage, setChatMessage] = useState('')
   const [expandedFAQ, setExpandedFAQ] = useState<string | null>(null)
+  
+  // Live chat state
+  const [chatMessage, setChatMessage] = useState('')
+  const [chatMessages, setChatMessages] = useState<{text: string; sender: 'user' | 'agent'; time: string}[]>([
+    {text: 'Hello! How can I help you today?', sender: 'agent', time: formatTime(new Date())}
+  ])
+  const [isAgentTyping, setIsAgentTyping] = useState(false)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  
+  // Email query state
+  const [emailQuery, setEmailQuery] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
+  
+  // Format time for chat messages
+  function formatTime(date: Date): string {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  // Scroll to bottom of chat when new messages are added
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
+  }, [chatMessages])
+
+  // Handle sending chat messages
+  const handleSendMessage = () => {
+    if (chatMessage.trim() === '') return
+    
+    // Add user message
+    const newMessage = {
+      text: chatMessage,
+      sender: 'user' as const,
+      time: formatTime(new Date())
+    }
+    setChatMessages([...chatMessages, newMessage])
+    setChatMessage('')
+    
+    // Simulate agent typing
+    setIsAgentTyping(true)
+    
+    // Simulate agent response after a delay
+    setTimeout(() => {
+      setIsAgentTyping(false)
+      
+      // Generate a response based on the user's message
+      let responseText = ''
+      const lowerCaseMessage = chatMessage.toLowerCase()
+      
+      if (lowerCaseMessage.includes('payment') || lowerCaseMessage.includes('invoice')) {
+        responseText = 'For payment related questions, please check the Account & Billing section. If you need further assistance, our finance team will get back to you within 24 hours.'
+      } else if (lowerCaseMessage.includes('account') || lowerCaseMessage.includes('login')) {
+        responseText = 'For account issues, you can reset your password from the login page or check our FAQ section for common account problems.'
+      } else if (lowerCaseMessage.includes('project') || lowerCaseMessage.includes('client')) {
+        responseText = 'If you are having issues with a project or client, please provide more details so we can assist you better.'
+      } else {
+        responseText = 'Thank you for your message. Our support team will review your query and get back to you soon. For faster assistance, you can also email us directly using the email form below.'
+      }
+      
+      const agentResponse = {
+        text: responseText,
+        sender: 'agent' as const,
+        time: formatTime(new Date())
+      }
+      
+      setChatMessages(prev => [...prev, agentResponse])
+    }, 1500)
+  }
+  
+  // Handle sending email query
+  const handleSendEmail = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (emailQuery.trim() === '') return
+    
+    // In a real application, you would send this to your backend
+    console.log('Sending email to freelancers.connect@gigzs.com:', emailQuery)
+    
+    // Show success message
+    setEmailSent(true)
+    
+    // Reset after 3 seconds
+    setTimeout(() => {
+      setEmailSent(false)
+      setEmailQuery('')
+    }, 3000)
+  }
 
   return (
     <div className="space-y-6">
@@ -25,15 +109,8 @@ function HelpCenter() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-semibold text-gray-800">Help Center</h2>
-          <p className="text-sm text-gray-600 mt-1">Find answers, submit tickets, and get support</p>
+          <p className="text-sm text-gray-600 mt-1">Find answers, get support, and contact our team</p>
         </div>
-        <button
-          onClick={() => setShowTicketForm(true)}
-          className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center"
-        >
-          <Plus size={20} className="mr-2" />
-          Submit Ticket
-        </button>
       </div>
 
       {/* Search */}
@@ -115,15 +192,37 @@ function HelpCenter() {
           </span>
         </div>
         
-        <div className="h-64 border border-gray-200 rounded-lg mb-4 p-4 overflow-y-auto">
+        <div 
+          ref={chatContainerRef}
+          className="h-64 border border-gray-200 rounded-lg mb-4 p-4 overflow-y-auto"
+        >
           <div className="space-y-4">
-            {/* Chat messages would go here */}
-            <div className="flex items-start space-x-2">
-              <div className="bg-gray-100 rounded-lg p-3 max-w-[80%]">
-                <p className="text-gray-900">Hello! How can I help you today?</p>
-                <span className="text-xs text-gray-500 mt-1">Support Agent • 12:30 PM</span>
+            {chatMessages.map((msg, index) => (
+              <div key={index} className={`flex items-start ${msg.sender === 'user' ? 'justify-end' : ''}`}>
+                <div 
+                  className={`rounded-lg p-3 max-w-[80%] ${msg.sender === 'user' 
+                    ? 'bg-[#00704A]/10 text-gray-900' 
+                    : 'bg-gray-100 text-gray-900'}`}
+                >
+                  <p>{msg.text}</p>
+                  <span className="text-xs text-gray-500 mt-1 block">
+                    {msg.sender === 'user' ? 'You' : 'Support Agent'} • {msg.time}
+                  </span>
+                </div>
               </div>
-            </div>
+            ))}
+            
+            {isAgentTyping && (
+              <div className="flex items-start">
+                <div className="bg-gray-100 rounded-lg p-3">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -132,92 +231,63 @@ function HelpCenter() {
             type="text"
             value={chatMessage}
             onChange={(e) => setChatMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
             placeholder="Type your message..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
           />
-          <button className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]">
+          <button 
+            onClick={handleSendMessage}
+            className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+          >
             <Send size={20} />
           </button>
         </div>
       </div>
-
-      {/* Support Ticket Form Modal */}
-      {showTicketForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Submit Support Ticket</h3>
-              <button
-                onClick={() => setShowTicketForm(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ×
-              </button>
-            </div>
-
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Subject</label>
-                <input
-                  type="text"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-[#00704A] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
-                <select className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-[#00704A] focus:outline-none">
-                  <option>Account Issues</option>
-                  <option>Payment Problems</option>
-                  <option>Technical Support</option>
-                  <option>Feature Request</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <textarea
-                  rows={4}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-[#00704A] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Attachments</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-                  <div className="space-y-1 text-center">
-                    <Plus className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label className="relative cursor-pointer rounded-md font-medium text-[#00704A] hover:text-[#005538]">
-                        <span>Upload files</span>
-                        <input type="file" className="sr-only" multiple />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, PDF up to 10MB</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-2 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowTicketForm(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
-                >
-                  Submit Ticket
-                </button>
-              </div>
-            </form>
-          </div>
+      
+      {/* Email Query Box */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-gray-900">Contact Us Directly</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Send your query directly to our support team at freelancers.connect@gigzs.com
+          </p>
         </div>
-      )}
+        
+        <form onSubmit={handleSendEmail} className="space-y-4">
+          <div>
+            <textarea
+              rows={4}
+              value={emailQuery}
+              onChange={(e) => setEmailQuery(e.target.value)}
+              placeholder="Describe your issue or question in detail..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+              required
+            />
+          </div>
+          
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center"
+              disabled={emailSent}
+            >
+              {emailSent ? (
+                <>
+                  <CheckCircle size={20} className="mr-2" />
+                  Email Sent!
+                </>
+              ) : (
+                <>
+                  <Mail size={20} className="mr-2" />
+                  Send Email
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
+
     </div>
   )
 }

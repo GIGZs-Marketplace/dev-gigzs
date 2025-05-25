@@ -8,14 +8,18 @@ import {
 import { supabase } from '../../../lib/supabase'
 
 interface PortfolioProject {
-  id: string
-  freelancer_id: string
-  title: string
-  description: string
-  skills: string[]
-  date: string
-  tech: string[]
-  image: string
+  id: string;
+  freelancer_id: string;
+  title: string;
+  description: string;
+  skills: string[];
+  date: string;
+  tech: string[];
+  external_url?: string;
+  project_type?: 'external' | 'platform';
+  platform_project_id?: string;
+  auto_rating?: number | null;
+  status?: string;
 }
 
 function Portfolio() {
@@ -29,8 +33,10 @@ function Portfolio() {
     description: '',
     tech: [] as string[],
     skills: [] as string[],
-    image: ''
+    external_url: '',
   })
+  const [freelancerProfile, setFreelancerProfile] = useState<any>(null)
+  const [profileChecked, setProfileChecked] = useState(false)
 
   useEffect(() => {
     loadPortfolioProjects()
@@ -43,24 +49,27 @@ function Portfolio() {
 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No user found')
+      console.log('Current user:', user);
 
       // Get freelancer profile ID first
-      const { data: freelancerProfile, error: profileError } = await supabase
+      const { data: freelancerProfileData, error: profileError } = await supabase
         .from('freelancer_profiles')
         .select('id')
         .eq('user_id', user.id)
         .single()
+
+      setFreelancerProfile(freelancerProfileData)
+      setProfileChecked(true)
 
       if (profileError) {
         console.error('Error fetching freelancer profile:', profileError)
         throw new Error('Could not find freelancer profile')
       }
 
-      if (!freelancerProfile) {
+      if (!freelancerProfileData) {
         throw new Error('Freelancer profile not found')
       }
-      console.log('Current user:', user);
-console.log('Freelancer profile:', freelancerProfile);
+      console.log('Freelancer profile:', freelancerProfileData);
       // Get portfolio projects
       const { data: portfolioData, error: portfolioError } = await supabase
         .from('Portfolio')
@@ -72,9 +81,13 @@ console.log('Freelancer profile:', freelancerProfile);
           skills,
           date,
           tech,
-          image
+          external_url,
+          project_type,
+          platform_project_id,
+          auto_rating,
+          status
         `)
-        .eq('freelancer_id', freelancerProfile.id)
+        .eq('freelancer_id', freelancerProfileData.id)
         .order('date', { ascending: false })
 
       if (portfolioError) {
@@ -102,16 +115,11 @@ console.log('Freelancer profile:', freelancerProfile);
         return
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No user found')
-
-      const { data: freelancerProfile } = await supabase
-        .from('freelancer_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-
-      if (!freelancerProfile) throw new Error('Freelancer profile not found')
+      if (!freelancerProfile || !freelancerProfile.id) {
+        setError('Freelancer profile not found. Please complete your freelancer onboarding.')
+        return
+      }
+      console.log('Using freelancerProfile for insert:', freelancerProfile)
 
       // Create the new project object
       const newProjectData = {
@@ -120,8 +128,10 @@ console.log('Freelancer profile:', freelancerProfile);
         description: newProject.description.trim(),
         tech: newProject.tech,
         skills: newProject.skills,
-        image: newProject.image.trim(),
-        date: new Date().toISOString()
+        external_url: newProject.external_url.trim(),
+        date: new Date().toISOString(),
+        project_type: 'external',
+        status: 'published',
       }
 
       // Insert the new project
@@ -131,7 +141,12 @@ console.log('Freelancer profile:', freelancerProfile);
 
       if (insertError) {
         console.error('Insert error:', insertError)
-        throw new Error('Failed to add project')
+        if (insertError.code === '23503') {
+          setError('Your freelancer profile could not be found in the database. Please contact support if this persists.')
+        } else {
+          setError('Failed to add project: ' + insertError.message)
+        }
+        return
       }
 
       // Fetch the updated list of projects
@@ -153,7 +168,7 @@ console.log('Freelancer profile:', freelancerProfile);
         description: '',
         tech: [],
         skills: [],
-        image: ''
+        external_url: ''
       })
     } catch (err) {
       console.error('Error adding project:', err)
@@ -215,16 +230,22 @@ console.log('Freelancer profile:', freelancerProfile);
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Portfolio</h2>
-          <p className="text-sm text-gray-600 mt-1">Showcase your best work and projects</p>
+          <p className="text-sm text-gray-600 mt-1">Showcase your best work and projects. Platform-completed projects are shown automatically and cannot be edited.</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+          disabled={!freelancerProfile || !freelancerProfile.id}
         >
           <Plus size={20} className="mr-2" />
-          Add Project
+          Add External Project
         </button>
       </div>
+      {profileChecked && (!freelancerProfile || !freelancerProfile.id) && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6">
+          You need to complete your freelancer profile before adding portfolio projects. Please go to your profile settings to finish onboarding.
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
@@ -237,7 +258,7 @@ console.log('Freelancer profile:', freelancerProfile);
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold">Add New Project</h3>
+              <h3 className="text-xl font-semibold">Add External Project</h3>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -281,14 +302,14 @@ console.log('Freelancer profile:', freelancerProfile);
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image URL
+                  External Project URL (GitHub, LinkedIn, etc.)
                 </label>
                 <input
                   type="text"
-                  value={newProject.image}
-                  onChange={(e) => setNewProject({ ...newProject, image: e.target.value })}
+                  value={newProject.external_url}
+                  onChange={(e) => setNewProject({ ...newProject, external_url: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
-                  placeholder="Enter image URL"
+                  placeholder="https://github.com/your-project or https://linkedin.com/in/your-profile"
                 />
               </div>
 
@@ -379,78 +400,90 @@ console.log('Freelancer profile:', freelancerProfile);
       )}
 
       {/* Project Grid */}
+      {/* Deduplicate projects by id before rendering */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {projects.map((project) => (
+        {Array.from(new Map(projects.map(p => [p.id, p])).values()).map((project) => (
           <div key={project.id} className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
-            {/* Project Image */}
-            <div className="relative h-48 bg-gray-100">
-              {project.image ? (
-                <img
-                  src={project.image}
-                  alt={project.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">
-                  No image available
-                </div>
-              )}
-              <div className="absolute top-4 right-4 flex space-x-2">
-                <button
-                  onClick={() => handleEdit(project.id)}
-                  className="p-2 bg-white rounded-full shadow hover:bg-gray-50"
-                >
-                  <Edit2 size={16} className="text-gray-600" />
-                </button>
-                <button
-                  onClick={() => handleDelete(project.id)}
-                  className="p-2 bg-white rounded-full shadow hover:bg-gray-50"
-                >
-                  <Trash size={20} />
-                </button>
-              </div>
-            </div>
-
-            {/* Project Details */}
             <div className="p-6">
-              <h3 className="text-xl font-semibold text-gray-900">{project.title}</h3>
+              <div className="flex items-center justify-between">
+                <span className={project.project_type === 'platform' ? 'text-xs text-blue-600 font-semibold' : 'text-xs text-gray-400'}>
+                  {project.project_type === 'platform' ? 'Platform Project' : 'External Project'}
+                </span>
+                {project.auto_rating !== undefined && project.auto_rating !== null && (
+                  <span className="text-xs text-yellow-600 font-semibold">Auto Rating: {project.auto_rating.toFixed(1)}</span>
+                )}
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mt-2">{project.title}</h3>
               <p className="mt-2 text-gray-600 line-clamp-2">{project.description}</p>
 
               {/* Technologies */}
               {project.tech && project.tech.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {project.tech.map((tech, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                    >
-                      {tech}
-                    </span>
-                  ))}
-                </div>
-              )}
+  <div className="mt-4">
+    <div className="font-semibold text-xs text-gray-500 mb-1">Technologies:</div>
+    <div className="flex flex-wrap gap-2">
+      {project.tech.map((tech, index) => (
+        <span
+          key={index}
+          className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+        >
+          {tech}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
 
               {/* Skills */}
               {project.skills && project.skills.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {project.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                    >
-                      {skill}
-                    </span>
-                  ))}
+  <div className="mt-2">
+    <div className="font-semibold text-xs text-gray-500 mb-1">Skills:</div>
+    <div className="flex flex-wrap gap-2">
+      {project.skills.map((skill, index) => (
+        <span
+          key={index}
+          className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+        >
+          {skill}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+
+              {/* External URL */}
+              {project.external_url && (
+                <div className="mt-4">
+                  <a href={project.external_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">
+                    View External Project
+                  </a>
                 </div>
               )}
 
               {/* Footer */}
               <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-sm text-gray-500">web</span>
+                <span className="text-sm text-gray-500">{project.status === 'published' ? 'Published' : (project.status || '')}</span>
                 <span className="text-sm text-gray-500">
                   {new Date(project.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </span>
               </div>
+
+              {/* Only allow edit/delete for external projects */}
+              {project.project_type !== 'platform' && (
+                <div className="flex space-x-2 mt-3">
+                  <button
+                    onClick={() => handleEdit(project.id)}
+                    className="p-2 bg-white rounded-full shadow hover:bg-gray-50"
+                  >
+                    <Edit2 size={16} className="text-gray-600" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(project.id)}
+                    className="p-2 bg-white rounded-full shadow hover:bg-gray-50"
+                  >
+                    <Trash size={20} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

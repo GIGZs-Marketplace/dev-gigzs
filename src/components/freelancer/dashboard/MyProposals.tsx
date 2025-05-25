@@ -16,6 +16,7 @@ import {
   Plus
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 
 interface Job {
   id: string
@@ -62,22 +63,62 @@ function MyProposals({ sectionState }: MyProposalsProps) {
   const [newProposal, setNewProposal] = useState({
     job_id: '',
     cover_letter: '',
-    proposed_rate: 0
+    proposed_rate: null as number | null
   })
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const navigate = useNavigate()
+  
+  // Handle view details click
+  const handleViewDetails = async (jobId: string) => {
+    try {
+      // First, find the project that corresponds to this job ID
+      const { data: projectData, error } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('job_id', jobId)
+        .single();
+
+      if (error || !projectData) {
+        console.error('Error finding project for job:', error);
+        alert('Could not find the associated project');
+        return;
+      }
+
+      // Set the active section to projects and pass the project ID
+      window.dispatchEvent(new CustomEvent('navigate', { 
+        detail: { 
+          section: 'projects',
+          projectId: projectData.id
+        } 
+      }));
+    } catch (err) {
+      console.error('Error in handleViewDetails:', err);
+      alert('An error occurred while loading the project');
+    }
+  }
 
   useEffect(() => {
     checkAuth()
   }, [])
 
   // Open modal and prefill job if jobId is passed in sectionState
+  // This should only run once when the component mounts with a valid sectionState
   useEffect(() => {
-    if (sectionState && sectionState.jobId) {
+    // Only open the modal if this is a fresh navigation with a jobId
+    if (sectionState && sectionState.jobId && sectionState.openModal === true) {
       setIsModalOpen(true);
       setNewProposal((prev) => ({ ...prev, job_id: sectionState.jobId }));
+      
+      // Clear the openModal flag to prevent reopening on subsequent renders
+      if (sectionState.openModal) {
+        sectionState.openModal = false;
+      }
+    } else {
+      // Always ensure modal is closed when component mounts without explicit open request
+      setIsModalOpen(false);
     }
     // eslint-disable-next-line
-  }, [sectionState]);
+  }, []);  // Empty dependency array means this only runs once on mount
 
   const checkAuth = async () => {
     try {
@@ -274,7 +315,7 @@ function MyProposals({ sectionState }: MyProposalsProps) {
       if (insertError) throw insertError
 
       // Reset form and close modal
-      setNewProposal({ job_id: '', cover_letter: '', proposed_rate: 0 })
+      setNewProposal({ job_id: '', cover_letter: '', proposed_rate: null })
       setIsModalOpen(false)
       
       // Refresh the proposals list
@@ -449,41 +490,6 @@ function MyProposals({ sectionState }: MyProposalsProps) {
                     <p className="text-sm font-medium">{proposal.job.duration?.replace(/_/g, ' ')}</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <DollarSign className="text-gray-400" size={18} />
-                  <div>
-                    <p className="text-xs text-gray-500">Client's Budget</p>
-                    <p className="text-sm font-medium">
-                      ${proposal.job.budget_amount}
-                      {proposal.job.budget_type === 'hourly' && '/hr'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-4">
-                <div className="flex items-center space-x-4">
-                  <button className="flex items-center text-gray-600 hover:text-[#00704A]">
-                    <MessageSquare size={18} className="mr-1" />
-                    <span>Message Client</span>
-                  </button>
-                  {proposal.status === 'pending' && (
-                    <>
-                      <button className="flex items-center text-gray-600 hover:text-[#00704A]">
-                        <Edit2 size={18} className="mr-1" />
-                        <span>Edit Proposal</span>
-                      </button>
-                      <button className="flex items-center text-red-600 hover:text-red-700">
-                        <XCircle size={18} className="mr-1" />
-                        <span>Withdraw</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-                <button className="flex items-center text-[#00704A] hover:text-[#005538]">
-                  <span>View Details</span>
-                  <ChevronRight size={18} className="ml-1" />
-                </button>
               </div>
             </div>
           ))
@@ -523,8 +529,9 @@ function MyProposals({ sectionState }: MyProposalsProps) {
                   <input
                     type="number"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                    value={newProposal.proposed_rate}
-                    onChange={(e) => setNewProposal({...newProposal, proposed_rate: Number(e.target.value)})}
+                    placeholder="Enter your proposed rate"
+                    value={newProposal.proposed_rate || ''}
+                    onChange={(e) => setNewProposal({...newProposal, proposed_rate: e.target.value ? Number(e.target.value) : null})}
                   />
                 </div>
               </div>

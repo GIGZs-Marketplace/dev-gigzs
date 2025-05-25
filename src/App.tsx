@@ -48,7 +48,6 @@ import MyProposals from './components/freelancer/dashboard/MyProposals'
 import Contracts from './components/freelancer/dashboard/Contracts'
 import MyProjects from './components/freelancer/dashboard/MyProjects'
 import ProjectDetails from './components/freelancer/dashboard/ProjectDetails'
-import TimeTracking from './components/freelancer/dashboard/TimeTracking'
 import Portfolio from './components/freelancer/dashboard/Portfolio'
 import MyEarnings from './components/freelancer/dashboard/MyEarnings'
 import Transactions from './components/freelancer/dashboard/Transactions'
@@ -56,7 +55,6 @@ import Reports from './components/freelancer/dashboard/Reports'
 import Profile from './components/freelancer/dashboard/Profile'
 import SkillsBadges from './components/freelancer/dashboard/SkillsBadges'
 import Reviews from './components/freelancer/dashboard/Reviews'
-import MyClients from './components/freelancer/dashboard/MyClients'
 import SecurityPage from './components/freelancer/dashboard/SecurityPage'
 import HelpCenter from './components/freelancer/dashboard/HelpCenter'
 import { supabase } from './lib/supabase'
@@ -74,16 +72,29 @@ function App() {
   const [freelancerName, setFreelancerName] = useState('')
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, message: 'New message from client', isRead: false },
-    { id: 2, message: 'Project deadline approaching', isRead: false },
-    { id: 3, message: 'Payment received', isRead: true }
-  ]);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [profileImageUrl, setProfileImageUrl] = useState('');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [sectionState, setSectionState] = useState<any>(null);
 
   
+  // Handle custom navigation events
+  useEffect(() => {
+    const handleNavigation = (e: CustomEvent) => {
+      const { section, projectId } = e.detail;
+      setActiveSection(section);
+      if (projectId) {
+        setSelectedProjectId(projectId);
+      }
+    };
+
+    // @ts-ignore - CustomEvent typing issue
+    window.addEventListener('navigate', handleNavigation);
+    
+    return () => {
+      // @ts-ignore - CustomEvent typing issue
+      window.removeEventListener('navigate', handleNavigation);
+    };
+  }, []);
+
   useEffect(() => {
     // Check if user is already authenticated on mount (for session persistence)
     const checkSession = async () => {
@@ -159,24 +170,90 @@ function App() {
     loadFreelancerProfile()
   }, [])
 
+  // Fetch user's profile picture
   useEffect(() => {
-    const fetchProfileImage = async () => {
+    const fetchProfilePicture = async () => {
       try {
-        const { data } = await supabase
-          .storage
-          .from('avatars')
-          .getPublicUrl('path/to/profile-image.jpg'); // Update with the correct path
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-        if (!data) throw new Error('Failed to fetch public URL');
+        // Try to fetch from the appropriate profile table based on user type
+        if (userType === 'freelancer') {
+          const { data: profile, error } = await supabase
+            .from('freelancer_profiles')
+            .select('avatar_url, full_name')
+            .eq('user_id', user.id)
+            .single();
 
-        setProfileImageUrl(data.publicUrl);
+          if (!error && profile) {
+            if (profile.avatar_url) {
+              setProfileImageUrl(profile.avatar_url);
+            }
+            if (profile.full_name) {
+              setFreelancerName(profile.full_name);
+            }
+          }
+        } else if (userType === 'client') {
+          const { data: profile, error } = await supabase
+            .from('client_profiles')
+            .select('avatar_url, full_name, company_name')
+            .eq('user_id', user.id)
+            .single();
+
+          if (!error && profile) {
+            if (profile.avatar_url) {
+              setProfileImageUrl(profile.avatar_url);
+            }
+            if (profile.company_name || profile.full_name) {
+              setFreelancerName(profile.company_name || profile.full_name || '');
+            }
+          }
+        }
       } catch (error) {
-        console.error('Error fetching profile image:', (error as Error).message);
+        console.error('Error fetching profile picture:', error);
       }
     };
 
-    fetchProfileImage();
-  }, []);
+    fetchProfilePicture();
+
+    // Set up real-time subscription for profile picture updates
+    const freelancerChannel = supabase
+      .channel('freelancer_profile_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'freelancer_profiles',
+      }, (payload) => {
+        if (userType === 'freelancer' && payload.new.avatar_url) {
+          setProfileImageUrl(payload.new.avatar_url);
+        }
+        if (userType === 'freelancer' && payload.new.full_name) {
+          setFreelancerName(payload.new.full_name);
+        }
+      })
+      .subscribe();
+      
+    const clientChannel = supabase
+      .channel('client_profile_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'client_profiles',
+      }, (payload) => {
+        if (userType === 'client' && payload.new.avatar_url) {
+          setProfileImageUrl(payload.new.avatar_url);
+        }
+        if (userType === 'client' && (payload.new.company_name || payload.new.full_name)) {
+          setFreelancerName(payload.new.company_name || payload.new.full_name);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(freelancerChannel);
+      supabase.removeChannel(clientChannel);
+    };
+  }, [userType]);
 
   const loadFreelancerProfile = async () => {
     try {
@@ -278,10 +355,6 @@ function App() {
     }
   }
 
-  const toggleNotifications = () => {
-    setIsNotificationsOpen(!isNotificationsOpen);
-  };
-
   if (!sessionChecked) {
     // Don't show login/signup until session check is complete
     return null;
@@ -315,19 +388,6 @@ function App() {
     return <FreelancerOnboarding onComplete={() => setOnboardingStatus('complete')} />;
   }
 
-  // Conditional rendering for upload details page
-  if (!profileImageUrl) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <h2 className="text-2xl font-bold mb-4">Upload Your Profile Picture</h2>
-          <p className="mb-4">Please upload a profile picture to proceed.</p>
-          {/* Add upload component or logic here */}
-        </div>
-      </div>
-    );
-  }
-
   const freelancerMenuSections = [
     {
       title: 'Main',
@@ -342,7 +402,6 @@ function App() {
       title: 'Work',
       items: [
         { id: 'projects', icon: Briefcase, text: 'My Projects' },
-        { id: 'timesheet', icon: Clock, text: 'Time Tracking' },
         { id: 'portfolio', icon: BookOpen, text: 'Portfolio' },
       ]
     },
@@ -366,7 +425,6 @@ function App() {
       title: 'Communication',
       items: [
         { id: 'messages', icon: MessageSquare, text: 'Messages' },
-        { id: 'clients', icon: Users, text: 'My Clients' },
       ]
     },
     {
@@ -431,8 +489,6 @@ function App() {
         return <Contracts />
       case 'projects':
         return <MyProjects onViewDetails={setSelectedProjectId} />
-      case 'timesheet':
-        return <TimeTracking />
       case 'portfolio':
         return <Portfolio />
       case 'earnings':
@@ -449,8 +505,6 @@ function App() {
         return <Reviews />
       case 'messages':
         return <MessagesPage />
-      case 'clients':
-        return <MyClients />
       case 'settings':
         return <SettingsPage />
       case 'security':
@@ -550,39 +604,19 @@ function App() {
               <h2 className="text-xl font-semibold text-gray-800">
                 {userType === 'freelancer' ? 'Freelancer Dashboard' : 'Client Dashboard'}
               </h2>
-              <div className="relative w-64 ml-8">
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#00704A]"
-                />
-                <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-              </div>
             </div>
 
             <div className="flex items-center space-x-4">
               <div className="relative">
-                <button onClick={toggleNotifications} className="p-2 hover:bg-gray-100 rounded-lg relative">
-                  <Bell size={20} />
-                  {notifications.some(n => !n.isRead) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
-                </button>
-                {isNotificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-20">
-                    {notifications.map(notification => (
-                      <a key={notification.id} href="#" onClick={() => setActiveSection('messages')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                        {notification.message}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="relative">
                 <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center space-x-2">
                   <img
-                    src={profileImageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80'}
+                    src={profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(freelancerName || 'U')}`}
                     alt="Profile"
-                    className="w-8 h-8 rounded-full"
+                    className="w-8 h-8 rounded-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(freelancerName || 'U')}`;
+                    }}
                   />
                   <span className="font-semibold">{freelancerName}</span>
                   <ChevronDown size={16} />

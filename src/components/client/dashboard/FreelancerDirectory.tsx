@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Filter, Star, MapPin, Briefcase, ChevronDown, MessageSquare, ExternalLink, Users, CheckCircle, AlertCircle } from 'lucide-react'
+import { Search, Filter, Star, MapPin, Briefcase, ChevronDown, Users, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useNavigate } from 'react-router-dom';
 
@@ -10,6 +10,7 @@ interface Freelancer {
   hourly_rate: number
   skills: string[]
   created_at: string
+  avatar_url?: string
   status?: 'Available' | 'Busy'
   completed_projects?: number
   rating?: number
@@ -17,12 +18,7 @@ interface Freelancer {
 
 function FreelancerDirectory() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [filters, setFilters] = useState({
-    skills: [] as string[],
-    availability: 'all',
-    experience: 'all',
-    hourlyRate: 'all'
-  })
+  const [sortBy, setSortBy] = useState<'recent' | 'rating'>('recent')
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,19 +33,66 @@ function FreelancerDirectory() {
       setLoading(true)
       setError(null)
 
-      const { data, error } = await supabase
+      // Get current client's ID
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { data: clientProfile, error: clientError } = await supabase
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+      
+      if (clientError || !clientProfile) throw new Error('Client profile not found')
+
+      // Get all projects where this client has accepted a freelancer
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('freelancer_id')
+        .eq('client_id', clientProfile.id)
+        .not('freelancer_id', 'is', null)
+
+      if (projectsError) throw projectsError
+
+      if (!projects || projects.length === 0) {
+        setFreelancers([])
+        setLoading(false)
+        return
+      }
+
+      // Get unique freelancer IDs
+      const freelancerIds = [...new Set(projects.map(p => p.freelancer_id))]
+
+      // Fetch freelancer details
+      const { data: freelancersData, error: freelancersError } = await supabase
         .from('freelancer_profiles')
-        .select('*')
+        .select(`
+          id,
+          full_name,
+          professional_title,
+          avatar_url,
+          hourly_rate,
+          location,
+          skills,
+          created_at
+        `)
+        .in('id', freelancerIds)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (freelancersError) throw freelancersError
 
-      // Transform and set default values for optional fields
-      const transformedData = (data || []).map(freelancer => ({
-        ...freelancer,
-        status: Math.random() > 0.5 ? 'Available' : 'Busy',
-        completed_projects: Math.floor(Math.random() * 50),
-        rating: (4 + Math.random()).toFixed(1)
+      // Transform data to match the Freelancer interface
+      const transformedData: Freelancer[] = (freelancersData || []).map(freelancer => ({
+        id: freelancer.id,
+        full_name: freelancer.full_name || 'Freelancer',
+        professional_title: freelancer.professional_title || 'Developer',
+        hourly_rate: freelancer.hourly_rate || 0,
+        skills: freelancer.skills || [],
+        created_at: freelancer.created_at,
+        avatar_url: freelancer.avatar_url || undefined,
+        status: 'Available',
+        completed_projects: 0,
+        rating: 4.5
       }))
 
       setFreelancers(transformedData)
@@ -61,35 +104,28 @@ function FreelancerDirectory() {
     }
   }
 
-  const filteredFreelancers = freelancers.filter(freelancer => {
-    const matchesSearch = 
+  const filteredAndSortedFreelancers = React.useMemo(() => {
+    // Filter by search term
+    const filtered = freelancers.filter(freelancer => 
       freelancer.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       freelancer.professional_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       freelancer.skills?.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
 
-    const matchesExperience = filters.experience === 'all' || true // Add experience filter logic
-    const matchesAvailability = filters.availability === 'all' || freelancer.status === filters.availability
-    const matchesHourlyRate = filters.hourlyRate === 'all' || (() => {
-      const rate = freelancer.hourly_rate || 0
-      switch (filters.hourlyRate) {
-        case 'under-50':
-          return rate < 50
-        case '50-100':
-          return rate >= 50 && rate <= 100
-        case 'over-100':
-          return rate > 100
-        default:
-          return true
+    // Sort based on selected option
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'recent') {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      } else {
+        return (b.rating || 0) - (a.rating || 0)
       }
-    })()
-
-    return matchesSearch && matchesExperience && matchesAvailability && matchesHourlyRate
-  })
+    })
+  }, [freelancers, searchTerm, sortBy])
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00704A]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     )
   }
@@ -115,113 +151,114 @@ function FreelancerDirectory() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-semibold text-gray-800">Freelancer Directory</h2>
-          <p className="text-sm text-gray-600 mt-1">Find and connect with talented freelancers</p>
+          <h2 className="text-xl font-semibold text-gray-800">Your Freelancers</h2>
+          <p className="text-sm text-gray-600 mt-1">View and manage freelancers you've worked with</p>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search freelancers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-64 focus:outline-none focus:border-[#00704A]"
-            />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-          </div>
-          
-          <select
-            value={filters.experience}
-            onChange={(e) => setFilters({ ...filters, experience: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
-          >
-            <option value="all">All Experience Levels</option>
-            <option value="entry">Entry Level</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="expert">Expert</option>
-          </select>
-
-          <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            <Filter size={20} className="text-gray-500 mr-2" />
-            More Filters
-          </button>
+      {/* Search and Sort */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-200">
+        <div className="relative w-full sm:w-96">
+          <input
+            type="text"
+            placeholder="Search freelancers by name, title, or skills..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:border-primary"
+          />
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
         </div>
-
-        <div className="flex items-center space-x-3">
-          <span className="text-sm text-gray-600">Sort by:</span>
-          <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            <span className="text-gray-700">Best Match</span>
-            <ChevronDown size={16} className="ml-2" />
-          </button>
+        
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <span className="text-sm text-gray-600 whitespace-nowrap">Sort by:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'recent' | 'rating')}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary w-full sm:w-auto"
+          >
+            <option value="recent">Most Recent</option>
+            <option value="rating">Highest Rated</option>
+          </select>
         </div>
       </div>
 
       {/* Freelancers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredFreelancers.length === 0 ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+        {filteredAndSortedFreelancers.length === 0 ? (
           <div className="col-span-3 text-center py-12">
             <h3 className="text-lg font-medium text-gray-900">No freelancers found</h3>
             <p className="mt-2 text-sm text-gray-500">
-              Try adjusting your search or filters
+              You haven't worked with any freelancers yet.
             </p>
           </div>
         ) : (
-          filteredFreelancers.map((freelancer) => (
+          filteredAndSortedFreelancers.map((freelancer) => (
             <div 
               key={freelancer.id} 
-              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
+              className="flex flex-col h-full bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
             >
-              <div className="flex items-start space-x-4">
-                <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${freelancer.id}`}
-                  alt={freelancer.full_name}
-                  className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
-                />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-lg text-gray-900 group-hover:text-[#00704A] transition-colors">
+              <div className="flex items-start space-x-4 flex-shrink-0">
+                {freelancer.avatar_url ? (
+                  <img
+                    src={freelancer.avatar_url}
+                    alt={freelancer.full_name}
+                    className="w-12 h-12 flex-shrink-0 rounded-full object-cover ring-2 ring-gray-100"
+                    onError={(e) => {
+                      // Fallback to initials if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.src = '';
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                {!freelancer.avatar_url && (
+                  <div className="w-12 h-12 flex-shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg ring-2 ring-gray-100">
+                    {freelancer.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-lg text-gray-900 group-hover:text-primary transition-colors truncate">
                     {freelancer.full_name}
                   </h3>
-                  <p className="text-sm text-gray-600">{freelancer.professional_title}</p>
+                  <p className="text-sm text-gray-600 truncate">{freelancer.professional_title}</p>
                   <div className="flex items-center mt-1 space-x-3">
                     <div className="flex items-center">
-                      <Star className="text-yellow-400" size={16} />
-                      <span className="ml-1 text-sm font-medium text-gray-900">
+                      <Star className="text-yellow-400 flex-shrink-0" size={16} />
+                      <span className="ml-1 text-sm font-medium text-gray-900 whitespace-nowrap">
                         {freelancer.rating}
                       </span>
                     </div>
                     <span className="text-gray-300">•</span>
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
                       ${freelancer.hourly_rate}/hr
                     </span>
                   </div>
                 </div>
               </div>
 
-              {freelancer.skills && freelancer.skills.length > 0 && (
-                <div className="mt-4">
-                  <div className="flex flex-wrap gap-2">
+              <div className="mt-4 flex-1 min-h-0">
+                {freelancer.skills && freelancer.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto py-1 custom-scrollbar">
                     {freelancer.skills.map((skill, index) => (
                       <span
                         key={index}
-                        className="px-2.5 py-1 bg-gray-50 text-gray-700 rounded-full text-sm border border-gray-200"
+                        className="inline-flex items-center px-2.5 py-1 bg-gray-50 text-gray-700 rounded-full text-xs border border-gray-200 whitespace-nowrap"
                       >
                         {skill}
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              <div className="mt-4 flex items-center justify-between text-sm">
+              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
                 <div className="flex items-center text-gray-500">
-                  <Briefcase size={16} className="mr-1" />
-                  <span>{freelancer.completed_projects} projects completed</span>
+                  <Briefcase size={14} className="mr-1 flex-shrink-0" />
+                  <span className="truncate">{freelancer.completed_projects || 0} projects</span>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                   freelancer.status === 'Available'
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-blue-100 text-blue-800'
@@ -230,25 +267,28 @@ function FreelancerDirectory() {
                 </span>
               </div>
 
-              <div className="mt-5 flex space-x-2">
-                <button
-                  className="flex-1 px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center justify-center shadow-sm hover:shadow"
-                  onClick={() => {
-                    // Use freelancer.id as user_id, adjust if needed
-                    navigate(`/messages?userId=${freelancer.id}`);
-                  }}
-                >
-                  <MessageSquare size={18} className="mr-2" />
-                  Contact
-                </button>
-                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all duration-300">
-                  <ExternalLink size={18} />
-                </button>
-              </div>
+
             </div>
           ))
         )}
       </div>
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+          height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+      `}</style>
     </div>
   )
 }

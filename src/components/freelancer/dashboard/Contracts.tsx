@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Search, 
   Filter, 
@@ -17,6 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import SignatureModal from '../../SignatureModal'
 
 type ContractStatus = 'ongoing' | 'completed' | 'disputed'
 type PaymentStatus = 'pending' | 'paid' | 'overdue'
@@ -30,7 +31,7 @@ interface Contract {
   endDate: string
   value: number
   paymentStatus: PaymentStatus
-  status: ContractStatus
+  status: string
   lastPayment: string
   nextPayment: string | null
   description: string
@@ -39,6 +40,9 @@ interface Contract {
     dueDate: string
     status: 'completed' | 'pending' | 'overdue'
   }[]
+  freelancer_signed?: boolean
+  progress_status?: number
+  code_url?: string
 }
 
 function Contracts() {
@@ -49,6 +53,124 @@ function Contracts() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showSignatureModal, setShowSignatureModal] = useState(false)
+  const [signingContractId, setSigningContractId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingContractId, setUploadingContractId] = useState<string | null>(null)
+  const [progressUpdating, setProgressUpdating] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchContracts = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('Not authenticated')
+        // Get freelancer profile
+        const { data: freelancerProfile } = await supabase
+          .from('freelancer_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .single()
+        if (!freelancerProfile) throw new Error('Freelancer profile not found')
+        // Fetch contracts for this freelancer
+        // First, fetch contracts with job details
+        const { data, error } = await supabase
+          .from('contracts')
+          .select(`
+            *,
+            job:job_id (
+              *,
+              duration
+            )
+          `)
+          .eq('freelancer_id', freelancerProfile.id)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        console.log('Raw contracts data from DB:', data); // Log raw data
+        
+        // Map DB fields to UI fields for all contracts
+        const mapped = (data || []).map((c: any) => {
+          // Function to convert job duration to days
+          const getDurationInDays = (durationStr: string | null): number => {
+            if (!durationStr) return 30; // Default to 30 days if no duration
+            
+            const lowerDuration = durationStr.toLowerCase();
+            
+            if (lowerDuration.includes('less than 1 month') || lowerDuration === '1 month') {
+              return 30; // 1 month = 30 days
+            } else if (lowerDuration.includes('1 to 3 months')) {
+              return 90; // 3 months = ~90 days
+            } else if (lowerDuration.includes('3 to 6 months')) {
+              return 180; // 6 months = ~180 days
+            } else if (lowerDuration.includes('6 to 12 months')) {
+              return 365; // 1 year = ~365 days
+            } else if (lowerDuration.includes('more than 1 year') || lowerDuration.includes('1+ year')) {
+              return 365; // 1 year = ~365 days
+            } else if (lowerDuration.includes('more than 2 years') || lowerDuration.includes('2+ years')) {
+              return 730; // 2 years = ~730 days
+            } else if (lowerDuration.includes('more than 3 years') || lowerDuration.includes('3+ years')) {
+              return 1095; // 3 years = ~1095 days
+            } else {
+              // Try to parse as a number of days as fallback
+              const days = parseInt(durationStr, 10);
+              return isNaN(days) ? 30 : days; // Default to 30 days if can't parse
+            }
+          };
+          
+          // Get duration from job if available, otherwise use contract duration
+          const durationDays = c.job?.duration 
+            ? getDurationInDays(c.job.duration)
+            : c.duration_days 
+              ? parseInt(c.duration_days, 10) 
+              : 30; // Default to 30 days if no duration specified
+          
+          // Parse dates if they exist
+          const startDate = c.start_date ? new Date(c.start_date) : null;
+          const endDate = c.end_date ? new Date(c.end_date) : null;
+          
+          // Calculate dates based on available data
+          let calculatedStartDate = startDate;
+          let calculatedEndDate = endDate;
+          
+          if (startDate && !endDate) {
+            // If we have start date, calculate end date from duration
+            calculatedEndDate = new Date(startDate);
+            calculatedEndDate.setDate(startDate.getDate() + durationDays);
+          } else if (!startDate && endDate) {
+            // If we have end date, calculate start date from duration
+            calculatedStartDate = new Date(endDate);
+            calculatedStartDate.setDate(endDate.getDate() - durationDays);
+          } else if (!startDate && !endDate) {
+            // If no dates, use current date as start and add duration
+            calculatedStartDate = new Date();
+            calculatedEndDate = new Date();
+            calculatedEndDate.setDate(calculatedStartDate.getDate() + durationDays);
+          }
+          
+          return {
+            ...c,
+            startDate: calculatedStartDate?.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            endDate: calculatedEndDate?.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            value: c.amount,
+            freelancer_signed: c.freelancer_signed ?? false,
+            status: c.status || 'ongoing',
+            paymentStatus: c.payment_status || 'pending'
+          };
+        })
+        setContracts(mapped);
+        console.log('Fetched contracts:', mapped); // For debugging
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchContracts()
+  }, [])
 
   const getStatusColor = (status: ContractStatus) => {
     switch (status) {
@@ -74,12 +196,9 @@ function Contracts() {
 
   const filteredContracts = contracts
     .filter(contract => {
-      const matchesSearch = 
-        contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contract.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = (contract.title || '').toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = statusFilter === 'all' || contract.status === statusFilter
-      const matchesPayment = paymentFilter === 'all' || contract.paymentStatus === paymentFilter
-      return matchesSearch && matchesStatus && matchesPayment
+      return matchesSearch && matchesStatus
     })
     .sort((a, b) => {
       if (sortBy === 'date') {
@@ -88,10 +207,76 @@ function Contracts() {
           : new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
       } else {
         return sortOrder === 'desc'
-          ? b.value - a.value
-          : a.value - b.value
+          ? (b.value || 0) - (a.value || 0)
+          : (a.value || 0) - (b.value || 0)
       }
     })
+
+  // Function to handle freelancer signature
+  const handleFreelancerSign = async (contractId: string, signature: string) => {
+    setLoading(true)
+    try {
+      // Update contract with freelancer signature
+      const { data, error } = await supabase
+        .from('contracts')
+        .update({ freelancer_signature: signature, freelancer_signed: true })
+        .eq('id', contractId)
+        .select()
+      if (error) throw error
+      // Check if client has also signed
+      const contract = data && data[0]
+      if (contract && contract.client_signed) {
+        await supabase.from('contracts').update({ status: 'signed' }).eq('id', contractId)
+      }
+      setShowSignatureModal(false)
+      setSigningContractId(null)
+      // Optionally refresh contracts list here
+    } catch (err) {
+      // Handle error (show toast, etc)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Progress update handler
+  const handleProgressChange = async (contractId: string, newProgress: number) => {
+    setProgressUpdating(contractId)
+    try {
+      const { error } = await supabase
+        .from('contracts')
+        .update({ progress_status: newProgress })
+        .eq('id', contractId)
+      if (error) throw error
+      // Refresh contracts
+      setContracts(contracts => contracts.map(c => c.id === contractId ? { ...c, progress_status: newProgress } : c))
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error updating progress:', err)
+    } finally {
+      setProgressUpdating(null)
+    }
+  }
+
+  // Code upload handler
+  const handleCodeUpload = async (contractId: string, file: File) => {
+    setUploadingContractId(contractId)
+    try {
+      const filePath = `${contractId}/${file.name}`
+      const { data, error } = await supabase.storage.from('project-code').upload(filePath, file, { upsert: true })
+      if (error) throw error
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('project-code').getPublicUrl(filePath)
+      const codeUrl = urlData.publicUrl
+      // Update contract with code_url
+      await supabase.from('contracts').update({ code_url: codeUrl }).eq('id', contractId)
+      setContracts(contracts => contracts.map(c => c.id === contractId ? { ...c, code_url: codeUrl } : c))
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error uploading code:', err)
+    } finally {
+      setUploadingContractId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -172,9 +357,16 @@ function Contracts() {
               <div className="space-y-2">
                 <div className="flex items-center space-x-3">
                   <h3 className="text-lg font-semibold text-gray-900">{contract.title}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(contract.status)}`}>
-                    {contract.status.charAt(0).toUpperCase() + contract.status.slice(1)}
-                  </span>
+                  <div className="flex flex-col space-y-1">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(contract.status as ContractStatus)}`}>
+                      {contract.status ? contract.status.charAt(0).toUpperCase() + contract.status.slice(1) : 'N/A'}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      contract.freelancer_signed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {contract.freelancer_signed ? 'Signed' : 'Not Signed'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-4 text-sm text-gray-600">
@@ -189,12 +381,25 @@ function Contracts() {
                 </div>
               </div>
 
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(contract.paymentStatus)}`}>
-                {contract.paymentStatus.charAt(0).toUpperCase() + contract.paymentStatus.slice(1)}
-              </span>
+              <div className="flex flex-col items-end space-y-1">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(contract.paymentStatus)}`}>
+                  {contract.paymentStatus ? contract.paymentStatus.charAt(0).toUpperCase() + contract.paymentStatus.slice(1) : 'N/A'}
+                </span>
+                {!contract.freelancer_signed && (
+                  <button
+                    onClick={() => {
+                      setSigningContractId(contract.id)
+                      setShowSignatureModal(true)
+                    }}
+                    className="text-xs px-3 py-1 bg-[#00704A] text-white rounded-full hover:bg-[#005538] transition-colors"
+                  >
+                    Sign Now
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-4">
+            <div className="mt-4 grid grid-cols-2 gap-4">
               <div className="flex items-center space-x-2">
                 <DollarSign className="text-gray-400" size={18} />
                 <div>
@@ -203,57 +408,61 @@ function Contracts() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Clock className="text-gray-400" size={18} />
+                <div className={`w-3 h-3 rounded-full ${
+                  contract.paymentStatus === 'paid' ? 'bg-green-500' : 'bg-yellow-500'
+                }`}></div>
                 <div>
-                  <p className="text-xs text-gray-500">Last Payment</p>
-                  <p className="text-sm font-medium">{new Date(contract.lastPayment).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Calendar className="text-gray-400" size={18} />
-                <div>
-                  <p className="text-xs text-gray-500">Next Payment</p>
+                  <p className="text-xs text-gray-500">Payment Status</p>
                   <p className="text-sm font-medium">
-                    {contract.nextPayment ? new Date(contract.nextPayment).toLocaleDateString() : 'N/A'}
+                    {contract.paymentStatus === 'paid' ? 'Paid by Client' : 'Not Paid by Client'}
                   </p>
                 </div>
               </div>
             </div>
 
-            {contract.status === 'ongoing' && contract.paymentStatus === 'overdue' && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center text-red-700">
-                <AlertCircle size={18} className="mr-2" />
-                <span className="text-sm">Payment is overdue. Please contact the client.</span>
-              </div>
-            )}
-
             <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <button className="flex items-center text-gray-600 hover:text-[#00704A]">
-                  <MessageSquare size={18} className="mr-1" />
-                  <span>Message Client</span>
-                </button>
-                <button className="flex items-center text-gray-600 hover:text-[#00704A]">
-                  <Download size={18} className="mr-1" />
-                  <span>Download Contract</span>
-                </button>
-                {contract.status === 'ongoing' && (
-                  <button className="flex items-center text-gray-600 hover:text-[#00704A]">
-                    <Edit2 size={18} className="mr-1" />
-                    <span>Request Modification</span>
-                  </button>
-                )}
+              <div className="flex items-center space-x-4 w-full">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-4">
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          if (new Date(contract.endDate) <= new Date()) {
+                            console.log('Withdraw money for contract:', contract.id);
+                          }
+                        }}
+                        disabled={new Date(contract.endDate) > new Date()}
+                        className={`flex items-center px-4 py-2 rounded-lg transition-all ${
+                          new Date(contract.endDate) <= new Date()
+                            ? 'bg-green-600 text-white hover:bg-green-700 shadow-md'
+                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200 cursor-not-allowed'
+                        }`}
+                      >
+                        <DollarSign size={18} className="mr-2" />
+                        <span>Withdraw Money</span>
+                      </button>
+                      {new Date(contract.endDate) > new Date() && (
+                        <div className="absolute z-10 hidden group-hover:block w-64 px-3 py-2 mt-1 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg">
+                          Available for withdrawal after {new Date(contract.endDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    {new Date(contract.endDate) > new Date() && (
+                      <span className="text-sm text-gray-500 hidden md:inline">
+                        Available {new Date(contract.endDate).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-4">
+                  {contract.status === 'ongoing' && (
+                    <button className="flex items-center text-gray-600 hover:text-[#00704A]">
+                      <Edit2 size={18} className="mr-1" />
+                      <span>Request Modification</span>
+                    </button>
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedContract(contract)
-                  setShowDetailsModal(true)
-                }}
-                className="flex items-center text-[#00704A] hover:text-[#005538]"
-              >
-                <span>View Details</span>
-                <ExternalLink size={18} className="ml-1" />
-              </button>
             </div>
           </div>
         ))}
@@ -338,105 +547,16 @@ function Contracts() {
           </div>
         </div>
       )}
+
+      {/* Signature Modal for Freelancer */}
+      <SignatureModal
+        isOpen={showSignatureModal}
+        onClose={() => setShowSignatureModal(false)}
+        onSign={signature => signingContractId && handleFreelancerSign(signingContractId, signature)}
+        loading={loading}
+      />
     </div>
   )
 }
-
-// Sample contracts data
-const contracts: Contract[] = [
-  {
-    id: '1',
-    title: 'E-commerce Website Development',
-    clientName: 'John Smith',
-    clientCompany: 'TechCorp Solutions',
-    startDate: '2024-01-15',
-    endDate: '2024-06-15',
-    value: 12000,
-    paymentStatus: 'pending',
-    status: 'ongoing',
-    lastPayment: '2024-03-15',
-    nextPayment: '2024-04-15',
-    description: 'Development of a full-featured e-commerce platform including product management, payment integration, and admin dashboard.',
-    milestones: [
-      {
-        title: 'Frontend Development',
-        dueDate: '2024-03-15',
-        status: 'completed'
-      },
-      {
-        title: 'Backend Integration',
-        dueDate: '2024-04-15',
-        status: 'pending'
-      },
-      {
-        title: 'Testing & Deployment',
-        dueDate: '2024-05-15',
-        status: 'pending'
-      }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Mobile App Development',
-    clientName: 'Sarah Johnson',
-    clientCompany: 'InnovateLabs',
-    startDate: '2024-02-01',
-    endDate: '2024-08-01',
-    value: 25000,
-    paymentStatus: 'overdue',
-    status: 'ongoing',
-    lastPayment: '2024-03-01',
-    nextPayment: '2024-04-01',
-    description: 'Development of a cross-platform mobile application for inventory management and real-time tracking.',
-    milestones: [
-      {
-        title: 'UI/UX Design',
-        dueDate: '2024-03-01',
-        status: 'completed'
-      },
-      {
-        title: 'Core Features Development',
-        dueDate: '2024-05-01',
-        status: 'pending'
-      },
-      {
-        title: 'Beta Testing',
-        dueDate: '2024-07-01',
-        status: 'pending'
-      }
-    ]
-  },
-  {
-    id: '3',
-    title: 'Website Redesign Project',
-    clientName: 'Emma Wilson',
-    clientCompany: 'Design Studio Pro',
-    startDate: '2024-01-01',
-    endDate: '2024-03-31',
-    value: 8000,
-    paymentStatus: 'paid',
-    status: 'completed',
-    lastPayment: '2024-03-31',
-    nextPayment: null,
-    description: 'Complete redesign of company website with focus on modern design principles and improved user experience.',
-    milestones: [
-      {
-        title: 'Design Mockups',
-        dueDate: '2024-01-15',
-        status: 'completed'
-      },
-      {
-        title: 'Development',
-        dueDate: '2024-02-28',
-        status: 'completed'
-      },
-      {
-        title: 'Content Migration',
-        dueDate: '2024-03-15',
-        status: 'completed'
-      }
-    ]
-  }
-]
 
 export default Contracts

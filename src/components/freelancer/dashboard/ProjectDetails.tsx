@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   ArrowLeft,
   Clock,
@@ -9,19 +9,50 @@ import {
   FileText,
   Upload,
   AlertCircle,
-  ChevronDown,
   Plus,
-  X
+  X,
+  ListChecks
 } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
 
 interface ProjectDetailsProps {
   projectId: string
   onBack: () => void
 }
 
+interface Requirement {
+  id: string;
+  requirements_text: string;
+  created_at: string;
+  created_by: string;
+}
+
 function ProjectDetails({ projectId, onBack }: ProjectDetailsProps) {
   const [showSubmitWorkModal, setShowSubmitWorkModal] = useState(false)
   const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null)
+  const [requirements, setRequirements] = useState<Requirement[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchRequirements = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('project_requirements')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setRequirements(data || []);
+      } catch (error) {
+        console.error('Error fetching requirements:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRequirements();
+  }, [projectId]);
 
   // Find project details - in a real app, this would fetch from API
   const project = projects.find(p => p.id === projectId)
@@ -152,9 +183,46 @@ function ProjectDetails({ projectId, onBack }: ProjectDetailsProps) {
         </div>
       </div>
 
-      {/* Milestones */}
+      {/* Project Details */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Project Milestones</h3>
+        {/* Requirements Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center">
+              <ListChecks className="mr-2" size={20} />
+              Project Requirements
+            </h3>
+          </div>
+          
+          {isLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#00704A]"></div>
+            </div>
+          ) : requirements.length === 0 ? (
+            <div className="text-center py-4 text-gray-500">
+              No requirements have been added yet.
+            </div>
+          ) : (
+            <div className="space-y-6 bg-gray-50 p-4 rounded-lg">
+              {requirements.map((req) => (
+                <div key={req.id} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                  <div className="whitespace-pre-line text-gray-800">
+                    {req.requirements_text}
+                  </div>
+                  <div className="flex items-center text-xs text-gray-500 mt-2">
+                    <Clock size={14} className="mr-1" />
+                    Added on {new Date(req.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        </div>
+        
+        <div className="border-t border-gray-200 pt-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Project Milestones</h3>
         <div className="space-y-4">
           {project.milestones.map((milestone, index) => (
             <div

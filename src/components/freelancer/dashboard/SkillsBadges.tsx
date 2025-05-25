@@ -11,6 +11,128 @@ import {
 import { supabase } from '../../../lib/supabase'
 
 function SkillsBadges() {
+  // --- Certifications State & Hooks ---
+  type Certification = {
+    id: string;
+    name: string;
+    issuer: string;
+    logo: string;
+    description: string;
+    credential_url: string;
+    issueDate: string;
+    expires: string | null;
+  };
+
+  const [certifications, setCertifications] = useState<Certification[]>([]);
+  const [showAddCertModal, setShowAddCertModal] = useState(false);
+  const [newCert, setNewCert] = useState({
+    name: '',
+    issuer: '',
+    logo: '',
+    description: '',
+    credential_url: '',
+    issueDate: '',
+    expires: '',
+  });
+  const [certLoading, setCertLoading] = useState(false);
+  const [certError, setCertError] = useState<string | null>(null);
+
+  // Load certifications from Supabase
+  type SupabaseCertification = {
+    id: string;
+    user_id: string;
+    name: string;
+    issuer: string;
+    logo: string;
+    description: string;
+    credential_url: string;
+    issue_date: string;
+    expires: string | null;
+  };
+
+  const loadCertifications = async () => {
+    try {
+      setCertLoading(true);
+      setCertError(null);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+      const { data, error } = await supabase
+        .from('certifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('issue_date', { ascending: false });
+      if (error) throw error;
+      setCertifications(
+        (data || []).map((cert: SupabaseCertification) => ({
+          id: cert.id,
+          name: cert.name,
+          issuer: cert.issuer,
+          logo: cert.logo,
+          description: cert.description,
+          credential_url: cert.credential_url,
+          issueDate: cert.issue_date,
+          expires: cert.expires,
+        }))
+      );
+    } catch (err) {
+      setCertError(err instanceof Error ? err.message : 'An error occurred loading certifications');
+    } finally {
+      setCertLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCertifications();
+  }, []);
+
+  // Add Certification Handler
+  const handleAddCertification = async () => {
+    if (!newCert.name.trim() || !newCert.issuer.trim()) return;
+    try {
+      setCertLoading(true);
+      setCertError(null);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+      const { data, error } = await supabase
+        .from('certifications')
+        .insert([
+          {
+            user_id: user.id,
+            name: newCert.name.trim(),
+            issuer: newCert.issuer.trim(),
+            logo: newCert.logo.trim(),
+            description: newCert.description.trim(),
+            credential_url: newCert.credential_url.trim(),
+            issue_date: newCert.issueDate,
+            expires: newCert.expires || null,
+          },
+        ])
+        .select();
+      if (error) throw error;
+      setShowAddCertModal(false);
+      setNewCert({ name: '', issuer: '', logo: '', description: '', credential_url: '', issueDate: '', expires: '' });
+      loadCertifications();
+    } catch (err) {
+      setCertError(err instanceof Error ? err.message : 'An error occurred adding certification');
+    } finally {
+      setCertLoading(false);
+    }
+  };
+
+  // Delete Certification Handler
+  const handleDeleteCertification = async (id: string) => {
+    try {
+      setCertLoading(true);
+      setCertError(null);
+      await supabase.from('certifications').delete().eq('id', id);
+      loadCertifications();
+    } catch (err) {
+      setCertError(err instanceof Error ? err.message : 'An error occurred deleting certification');
+    } finally {
+      setCertLoading(false);
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [showAddSkillModal, setShowAddSkillModal] = useState(false)
@@ -40,7 +162,8 @@ function SkillsBadges() {
       if (profileError) throw profileError
 
       if (freelancerProfile) {
-        setSkills(freelancerProfile.skills || [])
+        const dbSkills = freelancerProfile.skills;
+        setSkills(Array.isArray(dbSkills) ? dbSkills : []);
       }
 
     } catch (err) {
@@ -118,7 +241,7 @@ function SkillsBadges() {
         </div>
         <button
           onClick={() => setShowAddSkillModal(true)}
-          className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] flex items-center"
+          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-[#005538] flex items-center"
         >
           <Plus size={20} className="mr-2" />
           Add New Skill
@@ -157,30 +280,7 @@ function SkillsBadges() {
       {/* Badges Section */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-6">Earned Badges</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {badges.map((badge) => (
-            <div
-              key={badge.id}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-300"
-            >
-              <div className="flex items-center space-x-4">
-                <div className={`p-3 rounded-lg ${badge.bgColor}`}>
-                  <badge.icon className={`h-6 w-6 ${badge.iconColor}`} />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900">{badge.name}</h4>
-                  <p className="text-sm text-gray-500">{badge.description}</p>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between">
-                <span className="text-sm text-gray-500">Earned {badge.earnedDate}</span>
-                <button className="text-[#00704A] hover:text-[#005538]">
-                  <Info size={18} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="text-gray-500 text-center py-8">No badges earned yet.</div>
       </div>
 
       {/* Skills Section */}
@@ -209,7 +309,7 @@ function SkillsBadges() {
           ))}
           <button
             onClick={() => setShowAddSkillModal(true)}
-            className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#00704A] hover:text-[#00704A] flex items-center gap-2"
+            className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#00704A] hover:text-primary flex items-center gap-2"
             disabled={loading}
           >
             <Plus size={20} />
@@ -222,32 +322,67 @@ function SkillsBadges() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-6">Certifications</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {certifications.map((cert) => (
-            <div
-              key={cert.id}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-300"
-            >
-              <div className="flex items-center space-x-4">
-                <img
-                  src={cert.logo}
-                  alt={cert.name}
-                  className="w-12 h-12 object-contain"
-                />
-                <div>
-                  <h4 className="font-medium text-gray-900">{cert.name}</h4>
-                  <p className="text-sm text-gray-500">{cert.issuer}</p>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <span className="text-gray-500">Issued {cert.issueDate}</span>
-                {cert.expires ? (
-                  <span className="text-yellow-600">Expires {cert.expires}</span>
-                ) : (
-                  <span className="text-green-600">No Expiration</span>
-                )}
-              </div>
+          {certError && (
+  <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">{certError}</div>
+)}
+{certLoading ? (
+  <div className="text-gray-500">Loading certifications...</div>
+) : (
+  <>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {certifications.map((cert) => (
+        <div
+          key={cert.id}
+          className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-300"
+        >
+          <div className="flex items-center space-x-4">
+            <img
+              src={cert.logo}
+              alt={cert.name}
+              className="w-12 h-12 object-contain"
+            />
+            <div>
+              <h4 className="font-medium text-gray-900">{cert.name}</h4>
+              <p className="text-sm text-gray-500">{cert.issuer}</p>
+              {cert.description && (
+                <p className="text-xs text-gray-400 mt-1">{cert.description}</p>
+              )}
+              {cert.credential_url && (
+                <a
+                  href={cert.credential_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 underline mt-1 inline-block"
+                >
+                  View Credential
+                </a>
+              )}
             </div>
-          ))}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <span className="text-gray-500">Issued {cert.issueDate}</span>
+            {cert.expires ? (
+              <span className="text-yellow-600">Expires {cert.expires}</span>
+            ) : (
+              <span className="text-green-600">No Expiration</span>
+            )}
+            <button onClick={() => handleDeleteCertification(cert.id)} className="text-gray-400 hover:text-red-500 ml-2" disabled={certLoading}><X size={16} /></button>
+          </div>
+        </div>
+      ))}
+      <div className="flex items-stretch">
+        <button
+          onClick={() => setShowAddCertModal(true)}
+          className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#00704A] hover:text-primary flex items-center gap-2 w-full justify-center"
+          disabled={certLoading}
+        >
+          <Plus size={20} />
+          Add Certification
+        </button>
+      </div>
+    </div>
+  </>
+)}
         </div>
       </div>
 
@@ -273,10 +408,83 @@ function SkillsBadges() {
               </button>
               <button
                 onClick={handleAddSkill}
-                className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] disabled:opacity-50"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-[#005538] disabled:opacity-50"
                 disabled={loading || !newSkill.trim()}
               >
                 Add Skill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Add Certification Modal */}
+      {showAddCertModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Add Certification</h3>
+            <input
+              type="text"
+              placeholder="Certification Name"
+              value={newCert.name}
+              onChange={e => setNewCert({ ...newCert, name: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <input
+              type="text"
+              placeholder="Issuer"
+              value={newCert.issuer}
+              onChange={e => setNewCert({ ...newCert, issuer: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <input
+              type="text"
+              placeholder="Logo URL (optional)"
+              value={newCert.logo}
+              onChange={e => setNewCert({ ...newCert, logo: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <input
+              type="text"
+              placeholder="Description (optional)"
+              value={newCert.description}
+              onChange={e => setNewCert({ ...newCert, description: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <input
+              type="text"
+              placeholder="Credential URL (optional)"
+              value={newCert.credential_url}
+              onChange={e => setNewCert({ ...newCert, credential_url: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <label className="block text-sm text-gray-600 mb-1">Start Date</label>
+            <input
+              type="month"
+              value={newCert.issueDate}
+              onChange={e => setNewCert({ ...newCert, issueDate: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-2"
+            />
+            <label className="block text-sm text-gray-600 mb-1">End Date (optional)</label>
+            <input
+              type="month"
+              value={newCert.expires}
+              onChange={e => setNewCert({ ...newCert, expires: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A] mb-4"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowAddCertModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                disabled={certLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCertification}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-[#005538] disabled:opacity-50"
+                disabled={certLoading || !newCert.name.trim() || !newCert.issuer.trim()}
+              >
+                Add Certification
               </button>
             </div>
           </div>
@@ -316,31 +524,5 @@ const badges = [
   }
 ]
 
-const certifications = [
-  {
-    id: 1,
-    name: 'AWS Certified Solutions Architect',
-    issuer: 'Amazon Web Services',
-    logo: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80',
-    issueDate: 'Jan 2024',
-    expires: 'Jan 2027'
-  },
-  {
-    id: 2,
-    name: 'Google Cloud Professional',
-    issuer: 'Google Cloud',
-    logo: 'https://images.unsplash.com/photo-1573141597928-403fcee0e056?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80',
-    issueDate: 'Dec 2023',
-    expires: 'Dec 2026'
-  },
-  {
-    id: 3,
-    name: 'React Certification',
-    issuer: 'Meta',
-    logo: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80',
-    issueDate: 'Nov 2023',
-    expires: null
-  }
-]
 
 export default SkillsBadges

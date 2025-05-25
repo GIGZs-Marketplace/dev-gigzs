@@ -12,62 +12,65 @@ import {
   Save,
   X,
   Github,
-  Linkedin,
-  Twitter,
   AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+
+interface SocialLinks {
+  github: string;
+}
+
+interface Experience {
+  id: number | string;
+  role: string;
+  company: string;
+  duration: string;
+  description: string;
+}
+
+interface Education {
+  id: number | string;
+  degree: string;
+  institution: string;
+  year: string;
+}
+
+interface ProfileState {
+  fullName: string;
+  title: string;
+  email: string;
+  phone: string;
+  location: string;
+  website_url: string;
+  bio: string;
+  hourlyRate: string;
+  avatar_url: string;
+  skills: string[];
+  experience: Experience[];
+  education: Education[];
+  socialLinks: SocialLinks;
+}
 
 function Profile() {
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<ProfileState>({
     fullName: '',
     title: '',
     email: '',
     phone: '',
     location: '',
-    website: '',
+    website_url: '',
     bio: '',
     hourlyRate: '',
     avatar_url: '',
-    skills: [] as string[],
-    experience: [
-      {
-        id: 1,
-        role: 'Senior Full Stack Developer',
-        company: 'TechCorp Solutions',
-        duration: '2021 - Present',
-        description: 'Leading development of enterprise web applications'
-      },
-      {
-        id: 2,
-        role: 'Full Stack Developer',
-        company: 'InnovateLabs',
-        duration: '2019 - 2021',
-        description: 'Developed and maintained multiple client projects'
-      }
-    ],
-    education: [
-      {
-        id: 1,
-        degree: 'Master of Computer Science',
-        institution: 'Stanford University',
-        year: '2019'
-      },
-      {
-        id: 2,
-        degree: 'Bachelor of Computer Science',
-        institution: 'University of California',
-        year: '2017'
-      }
-    ],
+    skills: [],
+    experience: [],
+    education: [],
     socialLinks: {
-      github: 'https://github.com/example',
-      linkedin: 'https://linkedin.com/in/example',
-      twitter: 'https://twitter.com/example'
+      github: ''
     }
   })
 
@@ -80,15 +83,44 @@ function Profile() {
       setLoading(true)
       setError(null)
 
-      const { data: { user } } = await supabase.auth.getUser()
+      // First get the current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
       if (!user) throw new Error('No user found')
 
-      // Get freelancer profile
-      const { data: freelancerProfile, error: profileError } = await supabase
+      console.log('Loading profile for user:', user.id)
+
+      // Get or create the freelancer profile for this user
+      let { data: freelancerProfile, error: profileError } = await supabase
         .from('freelancer_profiles')
         .select('*')
         .eq('user_id', user.id)
         .single()
+
+      console.log('Freelancer profile response:', { freelancerProfile, profileError })
+
+      // If no profile exists, create one
+      if (profileError && profileError.code === 'PGRST116') {
+        console.log('No profile found, creating a new one')
+        const { data: newProfile, error: createError } = await supabase
+          .from('freelancer_profiles')
+          .insert([{ 
+            user_id: user.id,
+            full_name: user.user_metadata?.full_name || '',
+            professional_title: '',
+            skills: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }])
+          .select()
+          .single()
+
+        if (createError) throw createError
+        
+        freelancerProfile = newProfile
+        profileError = null
+        console.log('Created new profile:', freelancerProfile)
+      }
 
       if (profileError) throw profileError
 
@@ -99,7 +131,15 @@ function Profile() {
           title: freelancerProfile.professional_title || '',
           hourlyRate: freelancerProfile.hourly_rate?.toString() || '',
           skills: freelancerProfile.skills || [],
-          avatar_url: freelancerProfile.avatar_url || ''
+          avatar_url: freelancerProfile.avatar_url || '',
+          phone: freelancerProfile.phone || '',
+          location: freelancerProfile.location || '',
+          website_url: freelancerProfile.website_url || '',
+          socialLinks: {
+            github: freelancerProfile.github || ''
+          },
+          experience: freelancerProfile.experience || [],
+          education: freelancerProfile.education || [],
         }))
       }
 
@@ -116,27 +156,66 @@ function Profile() {
     }
   }
 
+  const validateProfile = (): boolean => {
+    if (!profile.fullName.trim()) {
+      setError('Full name is required');
+      return false;
+    }
+    
+    if (profile.website_url && !profile.website_url.startsWith('http')) {
+      setError('Please enter a valid URL starting with http:// or https://');
+      return false;
+    }
+    
+    if (profile.socialLinks.github && !profile.socialLinks.github.startsWith('http')) {
+      setError('Please enter a valid GitHub URL starting with http:// or https://');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSave = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No user found')
+      if (!validateProfile()) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      const updates = {
+        full_name: profile.fullName,
+        professional_title: profile.title || null,
+        hourly_rate: profile.hourlyRate ? parseFloat(profile.hourlyRate) : null,
+        skills: profile.skills || [],
+        phone: profile.phone || null,
+        location: profile.location || null,
+        website_url: profile.website_url || null,
+        github: profile.socialLinks.github || null,
+        experience: profile.experience || [],
+        education: profile.education || [],
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Updating profile with:', updates);
 
       const { error } = await supabase
         .from('freelancer_profiles')
-        .update({
-          full_name: profile.fullName,
-          professional_title: profile.title,
-          hourly_rate: profile.hourlyRate ? parseFloat(profile.hourlyRate) : null,
-          skills: profile.skills
-        })
-        .eq('user_id', user.id)
+        .update(updates)
+        .eq('user_id', user.id);
 
-      if (error) throw error
+      if (error) {
+        console.error('Error updating profile:', error);
+        throw error;
+      }
 
-      setIsEditing(false)
+      setIsEditing(false);
+      setError(null); // Clear any previous errors on successful save
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred saving profile')
     } finally {
@@ -146,13 +225,24 @@ function Profile() {
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
+      setError(null);
+      
       if (!event.target.files || event.target.files.length === 0) {
-        return
+        setError('No file selected');
+        return;
       }
-      setUploadingImage(true)
-      setError(null)
+      
+      const file = event.target.files[0];
+      const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!validImageTypes.includes(file.type)) {
+        setError('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
+        return;
+      }
+      
+      // Reset the input value to allow re-uploading the same file
+      event.target.value = '';
+      setUploadingImage(true);
 
-      const file = event.target.files[0]
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
       const filePath = `avatars/${fileName}`
@@ -300,44 +390,89 @@ function Profile() {
                   <span>{profile.email}</span>
                 </div>
                 <div className="flex items-center text-gray-600">
-                  <Phone size={18} className="mr-2" />
-                  <span>{profile.phone}</span>
+                  {isEditing ? (
+                    <>
+                      <Phone size={18} className="mr-2" />
+                      <input
+                        type="text"
+                        value={profile.phone}
+                        onChange={e => setProfile({ ...profile, phone: e.target.value })}
+                        className="border rounded-lg px-2 py-1 w-full"
+                        placeholder="Phone number"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Phone size={18} className="mr-2" />
+                      <span>{profile.phone}</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center text-gray-600">
-                  <MapPin size={18} className="mr-2" />
-                  <span>{profile.location}</span>
+                  {isEditing ? (
+                    <>
+                      <MapPin size={18} className="mr-2" />
+                      <input
+                        type="text"
+                        value={profile.location}
+                        onChange={e => setProfile({ ...profile, location: e.target.value })}
+                        className="border rounded-lg px-2 py-1 w-full"
+                        placeholder="Location"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <MapPin size={18} className="mr-2" />
+                      <span>{profile.location}</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center text-gray-600">
-                  <Globe size={18} className="mr-2" />
-                  <a href={profile.website} className="hover:text-[#00704A]">{profile.website}</a>
+                  {isEditing ? (
+                    <>
+                      <Globe size={18} className="mr-2" />
+                      <input
+                        type="text"
+                        value={profile.website_url}
+                        onChange={e => setProfile({ ...profile, website_url: e.target.value })}
+                        className="border rounded-lg px-2 py-1 w-full"
+                        placeholder="Portfolio/website_url URL"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Globe size={18} className="mr-2" />
+                      <a href={profile.website_url} className="hover:text-[#00704A]">{profile.website_url}</a>
+                    </>
+                  )}
                 </div>
               </div>
 
               <div className="mt-4 flex space-x-4">
-                <a
-                  href={profile.socialLinks.github}
-                  className="text-gray-600 hover:text-[#00704A]"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Github size={20} />
-                </a>
-                <a
-                  href={profile.socialLinks.linkedin}
-                  className="text-gray-600 hover:text-[#00704A]"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Linkedin size={20} />
-                </a>
-                <a
-                  href={profile.socialLinks.twitter}
-                  className="text-gray-600 hover:text-[#00704A]"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Twitter size={20} />
-                </a>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <Github size={20} className="text-gray-600" />
+                    <input
+                      type="text"
+                      value={profile.socialLinks.github}
+                      onChange={e => setProfile({
+                        ...profile,
+                        socialLinks: { ...profile.socialLinks, github: e.target.value }
+                      })}
+                      className="border rounded-lg px-2 py-1 w-48"
+                      placeholder="GitHub URL"
+                    />
+                  </div>
+                ) : (
+                  <a
+                    href={profile.socialLinks.github}
+                    className="text-gray-600 hover:text-[#00704A]"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Github size={20} />
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -412,40 +547,129 @@ function Profile() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Experience</h3>
         <div className="space-y-6">
-          {profile.experience.map((exp) => (
-            <div key={exp.id} className="flex">
+          {profile.experience.map((exp, idx) => (
+            <div key={exp.id || idx} className="flex items-start">
               <div className="mr-4">
                 <Briefcase size={20} className="text-gray-400" />
               </div>
-              <div>
-                <h4 className="font-medium text-gray-900">{exp.role}</h4>
-                <p className="text-gray-600">{exp.company}</p>
-                <p className="text-sm text-gray-500">{exp.duration}</p>
-                <p className="mt-2 text-gray-600">{exp.description}</p>
+              <div className="w-full">
+                {isEditing ? (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" value={exp.role} onChange={e => {
+                      const updated = [...profile.experience];
+                      updated[idx].role = e.target.value;
+                      setProfile({ ...profile, experience: updated });
+                    }} className="border rounded-lg px-2 py-1" placeholder="Role" />
+                    <input type="text" value={exp.company} onChange={e => {
+                      const updated = [...profile.experience];
+                      updated[idx].company = e.target.value;
+                      setProfile({ ...profile, experience: updated });
+                    }} className="border rounded-lg px-2 py-1" placeholder="Company" />
+                    <input type="text" value={exp.duration} onChange={e => {
+                      const updated = [...profile.experience];
+                      updated[idx].duration = e.target.value;
+                      setProfile({ ...profile, experience: updated });
+                    }} className="border rounded-lg px-2 py-1" placeholder="Duration" />
+                    <input type="text" value={exp.description} onChange={e => {
+                      const updated = [...profile.experience];
+                      updated[idx].description = e.target.value;
+                      setProfile({ ...profile, experience: updated });
+                    }} className="border rounded-lg px-2 py-1 col-span-2" placeholder="Description" />
+                    <button onClick={() => {
+                      setProfile({
+                        ...profile,
+                        experience: profile.experience.filter((_, i) => i !== idx)
+                      });
+                    }} className="text-red-500 col-span-2 text-left">Remove</button>
+                  </div>
+                ) : (
+                  <>
+                    <h4 className="font-medium text-gray-900">{exp.role}</h4>
+                    <p className="text-gray-600">{exp.company}</p>
+                    <p className="text-sm text-gray-500">{exp.duration}</p>
+                    <p className="mt-2 text-gray-600">{exp.description}</p>
+                  </>
+                )}
               </div>
             </div>
           ))}
+          {isEditing && (
+            <button
+              className="px-3 py-1 border-2 border-dashed border-gray-300 text-gray-600 rounded-full text-sm hover:border-[#00704A] hover:text-[#00704A] mt-2"
+              onClick={() => setProfile({
+                ...profile,
+                experience: [
+                  ...profile.experience,
+                  { id: Date.now(), role: '', company: '', duration: '', description: '' }
+                ]
+              })}
+            >
+              <Plus size={14} className="inline mr-1" /> Add Experience
+            </button>
+          )}
         </div>
-      </div>
+      </div> 
 
       {/* Education */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Education</h3>
         <div className="space-y-6">
-          {profile.education.map((edu) => (
-            <div key={edu.id} className="flex">
+          {profile.education.map((edu, idx) => (
+            <div key={edu.id || idx} className="flex items-start">
               <div className="mr-4">
                 <GraduationCap size={20} className="text-gray-400" />
               </div>
-              <div>
-                <h4 className="font-medium text-gray-900">{edu.degree}</h4>
-                <p className="text-gray-600">{edu.institution}</p>
-                <p className="text-sm text-gray-500">{edu.year}</p>
+              <div className="w-full">
+                {isEditing ? (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" value={edu.degree} onChange={e => {
+                      const updated = [...profile.education];
+                      updated[idx].degree = e.target.value;
+                      setProfile({ ...profile, education: updated });
+                    }} className="border rounded-lg px-2 py-1" placeholder="Degree" />
+                    <input type="text" value={edu.institution} onChange={e => {
+                      const updated = [...profile.education];
+                      updated[idx].institution = e.target.value;
+                      setProfile({ ...profile, education: updated });
+                    }} className="border rounded-lg px-2 py-1" placeholder="Institution" />
+                    <input type="text" value={edu.year} onChange={e => {
+                      const updated = [...profile.education];
+                      updated[idx].year = e.target.value;
+                      setProfile({ ...profile, education: updated });
+                    }} className="border rounded-lg px-2 py-1 col-span-2" placeholder="Year" />
+                    <button onClick={() => {
+                      setProfile({
+                        ...profile,
+                        education: profile.education.filter((_, i) => i !== idx)
+                      });
+                    }} className="text-red-500 col-span-2 text-left">Remove</button>
+                  </div>
+                ) : (
+                  <>
+                    <h4 className="font-medium text-gray-900">{edu.degree}</h4>
+                    <p className="text-gray-600">{edu.institution}</p>
+                    <p className="text-sm text-gray-500">{edu.year}</p>
+                  </>
+                )}
               </div>
             </div>
           ))}
+          {isEditing && (
+            <button
+              className="px-3 py-1 border-2 border-dashed border-gray-300 text-gray-600 rounded-full text-sm hover:border-[#00704A] hover:text-[#00704A] mt-2"
+              onClick={() => setProfile({
+                ...profile,
+                education: [
+                  ...profile.education,
+                  { id: Date.now(), degree: '', institution: '', year: '' }
+                ]
+              })}
+            >
+              <Plus size={14} className="inline mr-1" /> Add Education
+            </button>
+          )}
         </div>
-      </div>
+      </div> 
 
       {/* Save Button */}
       {isEditing && (

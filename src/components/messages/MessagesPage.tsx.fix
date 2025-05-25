@@ -1,0 +1,144 @@
+// ... (previous imports remain the same)
+
+function MessagesPage({ initialUserId }: MessagesPageProps) {
+  // ... (existing state)
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  // ... (other state)
+
+  // Update the fetchOtherUsersInfo function
+  const fetchOtherUsersInfo = async (otherIds: string[]) => {
+    const userMap: Record<string, { name?: string; email?: string }> = {};
+    
+    // ... (existing code to populate userMap)
+    
+    // Finally, try to get any remaining users from auth.users
+    const remainingIds = otherIds.filter(id => !userMap[id]);
+    if (remainingIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email')
+        .in('id', remainingIds);
+      
+      if (users) {
+        users.forEach((u: any) => {
+          if (!userMap[u.id]) {
+            userMap[u.id] = { 
+              email: u.email 
+            };
+          }
+        });
+      }
+    }
+    
+    return userMap;
+  };
+
+  // Effect to fetch and cache display names
+  useEffect(() => {
+    const fetchDisplayNames = async () => {
+      const newDisplayNames: Record<string, string> = {};
+      const userIds = new Set<string>();
+
+      // Collect all unique user IDs from chats
+      chats.forEach(chat => {
+        userIds.add(chat.participant_one);
+        userIds.add(chat.participant_two);
+      });
+
+      // Process each user ID
+      for (const id of userIds) {
+        if (displayNames[id] || !id) continue;
+        
+        try {
+          // Check if we already have the name in otherUsers or contacts
+          const otherInfo = otherUsers[id];
+          const contact = contacts.find(c => c.user_id === id);
+          
+          if (otherInfo?.name?.trim()) {
+            newDisplayNames[id] = otherInfo.name;
+            continue;
+          } else if (contact?.name?.trim()) {
+            newDisplayNames[id] = contact.name;
+            continue;
+          }
+          
+          // Check client_profiles
+          const { data: clientProfile } = await supabase
+            .from('client_profiles')
+            .select('full_name')
+            .eq('user_id', id)
+            .single();
+            
+          if (clientProfile?.full_name) {
+            newDisplayNames[id] = clientProfile.full_name;
+            continue;
+          }
+          
+          // Check freelancer_profiles
+          const { data: freelancerProfile } = await supabase
+            .from('freelancer_profiles')
+            .select('full_name')
+            .eq('user_id', id)
+            .single();
+            
+          if (freelancerProfile?.full_name) {
+            newDisplayNames[id] = freelancerProfile.full_name;
+            continue;
+          }
+          
+          // Fallback to user ID
+          newDisplayNames[id] = `User (${id.slice(0, 6)})`;
+        } catch (error) {
+          console.error(`Error fetching display name for user ${id}:`, error);
+          newDisplayNames[id] = `User (${id.slice(0, 6)})`;
+        }
+      }
+      
+      // Update state with new display names
+      if (Object.keys(newDisplayNames).length > 0) {
+        setDisplayNames(prev => ({
+          ...prev,
+          ...newDisplayNames
+        }));
+      }
+    };
+    
+    if (chats.length > 0) {
+      fetchDisplayNames();
+    }
+  }, [chats, otherUsers, contacts]);
+
+  // Get display name from cache or other sources
+  const getDisplayName = (otherId: string, chat?: Chat | null) => {
+    // Check cached display names first
+    if (displayNames[otherId]) {
+      return displayNames[otherId];
+    }
+    
+    // Check other sources synchronously
+    const otherInfo = otherUsers[otherId];
+    if (otherInfo?.name?.trim()) {
+      return otherInfo.name;
+    }
+    
+    const contact = contacts.find(c => c.user_id === otherId);
+    if (contact?.name?.trim()) {
+      return contact.name;
+    }
+    
+    if (chat?.client_company_name?.trim()) {
+      return chat.client_company_name;
+    }
+    
+    if (otherInfo?.email?.trim()) {
+      return otherInfo.email;
+    }
+    
+    // Fallback
+    return `User (${otherId.slice(0, 6)})`;
+  };
+
+  // ... (rest of the component)
+}
+
+export default MessagesPage;

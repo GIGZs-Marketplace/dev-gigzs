@@ -1,5 +1,6 @@
 import React from 'react'
-import { CheckCircle2, Clock, ShieldCheck, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Clock, ShieldCheck, AlertCircle, Home } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 interface VerificationProps {
   onNext: () => void
@@ -7,8 +8,19 @@ interface VerificationProps {
 }
 
 function Verification({ onNext }: VerificationProps) {
+  const navigate = useNavigate();
   return (
     <div className="space-y-6">
+      <div className="flex justify-end mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="flex items-center text-gray-600 hover:text-[#00704A] transition-colors"
+        >
+          <Home className="h-5 w-5 mr-1" />
+          <span>Home</span>
+        </button>
+      </div>
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-800">Verification Status</h2>
         <p className="mt-2 text-gray-600">Track the status of your account verification</p>

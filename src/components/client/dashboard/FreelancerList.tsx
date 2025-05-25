@@ -1,15 +1,126 @@
-import React, { useState } from 'react'
-import { Star, MessageSquare, ExternalLink, MapPin, Briefcase, Filter, Search, ChevronDown, Building2, Users, Globe, CheckCircle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Star, MessageSquare, ExternalLink, MapPin, Briefcase, Filter, Search, ChevronDown, Building2, Users, Globe, CheckCircle, Loader2 } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
+
+interface Freelancer {
+  id: string;
+  name: string;
+  title: string;
+  image: string;
+  rating: number;
+  hourlyRate: string;
+  location: string;
+  skills: string[];
+  completedProjects: number;
+  availability: string;
+}
 
 function FreelancerList() {
   const [view, setView] = useState<'freelancers' | 'agencies'>('freelancers')
   const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [filters, setFilters] = useState({
     skills: [] as string[],
     availability: 'all',
     experience: 'all',
     hourlyRate: 'all'
   })
+
+  useEffect(() => {
+    const fetchFreelancers = async () => {
+      try {
+        // Get current client's ID
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('Not authenticated')
+
+        const { data: clientProfile } = await supabase
+          .from('client_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .single()
+        
+        if (!clientProfile) throw new Error('Client profile not found')
+
+        // Get all projects where this client has accepted a freelancer
+        const { data: projects, error: projectsError } = await supabase
+          .from('projects')
+          .select('freelancer_id')
+          .eq('client_id', clientProfile.id)
+          .not('freelancer_id', 'is', null)
+
+        if (projectsError) throw projectsError
+
+        if (!projects || projects.length === 0) {
+          setFreelancers([])
+          setLoading(false)
+          return
+        }
+
+        // Get unique freelancer IDs
+        const freelancerIds = [...new Set(projects.map(p => p.freelancer_id))]
+
+        // Fetch freelancer details
+        const { data: freelancersData, error: freelancersError } = await supabase
+          .from('freelancer_profiles')
+          .select(`
+            id,
+            full_name,
+            professional_title,
+            avatar_url,
+            hourly_rate,
+            location,
+            skills
+          `)
+          .in('id', freelancerIds)
+
+        if (freelancersError) throw freelancersError
+
+        // Transform data to match the expected format
+        const transformedFreelancers = (freelancersData || []).map(freelancer => ({
+          id: freelancer.id,
+          name: freelancer.full_name || 'Freelancer',
+          title: freelancer.professional_title || 'Developer',
+          image: freelancer.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(freelancer.full_name || 'F'),
+          rating: 4.5, // You might want to fetch actual ratings
+          hourlyRate: `$${freelancer.hourly_rate || '50'}`,
+          location: freelancer.location || 'Remote',
+          skills: freelancer.skills || [],
+          completedProjects: 0, // You might want to fetch this data
+          availability: 'Available' // You might want to fetch this data
+        }))
+
+        setFreelancers(transformedFreelancers)
+      } catch (error) {
+        console.error('Error fetching freelancers:', error)
+        // Set empty array on error
+        setFreelancers([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+
+    fetchFreelancers()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-[#00704A]" />
+        <span className="ml-2">Loading freelancers...</span>
+      </div>
+    )
+  }
+
+  if (freelancers.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-lg font-medium text-gray-900">No freelancers found</h3>
+        <p className="mt-1 text-sm text-gray-500">You haven't worked with any freelancers yet.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -73,7 +184,7 @@ function FreelancerList() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Skills</label>
             <select 
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
-              value={filters.skills}
+              value={filters.skills.length > 0 ? filters.skills[0] : 'all'}
               onChange={(e) => setFilters({ ...filters, skills: [e.target.value] })}
             >
               <option value="all">All Skills</option>
@@ -130,7 +241,14 @@ function FreelancerList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {view === 'freelancers' ? (
           // Freelancer Cards
-          freelancers.map((freelancer) => (
+          freelancers.filter(freelancer => 
+            // Search filter
+            freelancer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            freelancer.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            freelancer.skills.some(skill => 
+              skill.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          ).map((freelancer) => (
             <div 
               key={freelancer.id} 
               className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition-all duration-300 group"

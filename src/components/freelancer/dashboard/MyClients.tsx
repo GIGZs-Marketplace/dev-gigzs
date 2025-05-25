@@ -14,7 +14,8 @@ import {
   Phone,
   MapPin,
   Briefcase,
-  Plus
+  Plus,
+  CheckCircle
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase';
 
@@ -34,62 +35,124 @@ function MyClients() {
         // 1. Get current user
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not logged in');
+        console.log('Current auth user ID:', user.id);
         // 2. Get freelancer profile
-        const { data: freelancerProfile } = await supabase
+        const { data: freelancerProfile, error: freelancerError } = await supabase
           .from('freelancer_profiles')
           .select('id')
           .eq('user_id', user.id)
           .single();
+        if (freelancerError) throw freelancerError;
         if (!freelancerProfile) throw new Error('No freelancer profile found.');
+        console.log('Freelancer profile ID:', freelancerProfile.id);
         // 3. Get all accepted job applications for this freelancer
         const { data: applications, error: appsError } = await supabase
           .from('job_applications')
-          .select('job_id, status, jobs ( id, title, created_at, client_id, budget_amount, budget_max_amount, status, client_profiles ( user_id, company_name, avatar_url, email, phone, location ) )')
+          .select('job_id, status')
           .eq('freelancer_id', freelancerProfile.id)
           .eq('status', 'accepted');
+        console.log('Applications found for freelancerProfile.id', freelancerProfile.id, ':', applications, 'Error:', appsError);
         if (appsError) throw appsError;
-        // 4. Group jobs by client
+        if (!applications || applications.length === 0) {
+          setClients([]);
+          setLoading(false);
+          return;
+        }
+        // 4. Fetch jobs and their client profiles using job_ids
+        const jobIds = applications.map((app: any) => app.job_id).filter(Boolean);
+        console.log('Job IDs from applications:', jobIds);
+        if (jobIds.length === 0) {
+          setClients([]);
+          setLoading(false);
+          return;
+        }
+        const { data: jobs, error: jobsError } = await supabase
+          .from('jobs')
+          .select('id, title, created_at, client_id, budget_amount, budget_max_amount, status, client_profiles ( user_id, company_name, avatar_url, email, phone, location, is_verified )')
+          .in('id', jobIds);
+        console.log('Jobs fetched for these jobIds:', jobs, 'Error:', jobsError);
+        if (jobsError) throw jobsError;
+        // 5. Group jobs by client
         const clientMap: Record<string, any> = {};
-        (applications || []).forEach(app => {
-          let job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
-          if (!job || !job.client_profiles) return;
-          let clientProfile = Array.isArray(job.client_profiles) ? job.client_profiles[0] : job.client_profiles;
-          if (!clientProfile || !clientProfile.user_id) return;
-          const clientId = clientProfile.user_id;
-          const clientName = clientProfile.company_name  || 'Client';
-          if (!clientMap[clientId]) {
-            clientMap[clientId] = {
-              id: clientId,
-              name: clientName,
-              company: clientName,
-              avatar: clientProfile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}`,
-              email: clientProfile.email || '',
-              phone: clientProfile.phone || '',
-              location: clientProfile.location || '',
-              totalProjects: 0,
-              totalEarnings: 0,
-              lastProject: '',
-              rating: 4.8, // Placeholder, you can fetch real rating if you have it
-              recentProjects: []
-            };
+        (jobs || []).forEach((job: any) => {
+          let clientProfilesArr: any[] = [];
+          if (job.client_profiles) {
+            clientProfilesArr = Array.isArray(job.client_profiles) ? job.client_profiles : [job.client_profiles];
           }
-          // Add project to client
-          clientMap[clientId].totalProjects += 1;
-          clientMap[clientId].totalEarnings += job.budget_amount || job.budget_max_amount || 0;
-          // For lastProject, use the most recent job
-          if (!clientMap[clientId].lastProject || new Date(job.created_at) > new Date(clientMap[clientId].lastProjectDate || 0)) {
-            clientMap[clientId].lastProject = timeAgo(job.created_at);
-            clientMap[clientId].lastProjectDate = job.created_at;
+          if (clientProfilesArr.length === 0) {
+            // Fallback: use job.client_id if no profile found
+            const clientId = job.client_id || 'unknown';
+            if (!clientMap[clientId]) {
+              clientMap[clientId] = {
+                id: clientId,
+                name: 'Client',
+                company: 'Client',
+                avatar: `https://ui-avatars.com/api/?name=Client`,
+                email: '',
+                phone: '',
+                location: '',
+                totalProjects: 0,
+                totalEarnings: 0,
+                lastProject: '',
+                rating: 4.8,
+                recentProjects: [],
+                lastProjectDate: null,
+                isVerified: false,
+              };
+            }
+            clientMap[clientId].totalProjects += 1;
+            clientMap[clientId].totalEarnings += job.budget_amount || job.budget_max_amount || 0;
+            if (!clientMap[clientId].lastProjectDate || new Date(job.created_at) > new Date(clientMap[clientId].lastProjectDate)) {
+              clientMap[clientId].lastProject = timeAgo(job.created_at);
+              clientMap[clientId].lastProjectDate = job.created_at;
+            }
+            clientMap[clientId].recentProjects.push({
+              name: job.title,
+              date: new Date(job.created_at).toLocaleDateString(),
+              value: job.budget_amount || job.budget_max_amount || 0,
+              status: job.status || 'In Progress',
+            });
+            clientMap[clientId].recentProjects = clientMap[clientId].recentProjects.slice(-3);
+          } else {
+            clientProfilesArr.forEach((clientProfile: any) => {
+              if (!clientProfile || !clientProfile.user_id) return;
+              const clientId = clientProfile.user_id;
+              const clientName = clientProfile.company_name || 'Client';
+              if (!clientMap[clientId]) {
+                clientMap[clientId] = {
+                  id: clientId,
+                  name: clientName,
+                  company: clientName,
+                  avatar: clientProfile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}`,
+                  email: clientProfile.email || '',
+                  phone: clientProfile.phone || '',
+                  location: clientProfile.location || '',
+                  totalProjects: 0,
+                  totalEarnings: 0,
+                  lastProject: '',
+                  rating: 4.8,
+                  recentProjects: [],
+                  lastProjectDate: null,
+                  isVerified: clientProfile.is_verified || false,
+                };
+              }
+              clientMap[clientId].totalProjects += 1;
+              clientMap[clientId].totalEarnings += job.budget_amount || job.budget_max_amount || 0;
+              if (!clientMap[clientId].lastProjectDate || new Date(job.created_at) > new Date(clientMap[clientId].lastProjectDate)) {
+                clientMap[clientId].lastProject = timeAgo(job.created_at);
+                clientMap[clientId].lastProjectDate = job.created_at;
+              }
+              clientMap[clientId].recentProjects.push({
+                name: job.title,
+                date: new Date(job.created_at).toLocaleDateString(),
+                value: job.budget_amount || job.budget_max_amount || 0,
+                status: job.status || 'In Progress',
+              });
+              clientMap[clientId].recentProjects = clientMap[clientId].recentProjects.slice(-3);
+            });
           }
-          // Add to recentProjects (limit to 3)
-          clientMap[clientId].recentProjects.push({
-            name: job.title,
-            date: new Date(job.created_at).toLocaleDateString(),
-            value: job.budget_amount || job.budget_max_amount || 0,
-            status: job.status || 'In Progress'
-          });
-          clientMap[clientId].recentProjects = clientMap[clientId].recentProjects.slice(-3);
         });
+        console.log('Clients grouped for display:', clientMap);
         setClients(Object.values(clientMap));
       } catch (err: any) {
         setError(err.message || 'Failed to fetch clients.');
@@ -125,14 +188,14 @@ function MyClients() {
   };
 
   // Filter and search
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) || client.company.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredClients = clients.filter((client: any) => {
+    const matchesSearch = client.name?.toLowerCase().includes(searchTerm.toLowerCase()) || client.company?.toLowerCase().includes(searchTerm.toLowerCase());
     // You can add more filter logic for status here if you want
     return matchesSearch;
   });
 
   // Sort
-  filteredClients.sort((a, b) => {
+  filteredClients.sort((a: any, b: any) => {
     if (sortBy === 'recent') {
       return new Date(b.lastProjectDate || 0).getTime() - new Date(a.lastProjectDate || 0).getTime();
     } else if (sortBy === 'earnings') {
@@ -142,6 +205,13 @@ function MyClients() {
     }
     return 0;
   });
+
+  const getAvatarUrl = (client: any) => {
+    if (client.avatar && client.avatar.startsWith('http')) {
+      return client.avatar;
+    }
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(client.company || 'Client')}&background=00704A&color=fff`;
+  };
 
   return (
     <div className="space-y-6">
@@ -212,16 +282,33 @@ function MyClients() {
               {/* Client Header */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4">
-                  <img
-                    src={client.avatar}
-                    alt={client.name}
-                    className="w-12 h-12 rounded-full"
-                  />
+                  <div className="relative">
+                    <img
+                      src={getAvatarUrl(client)}
+                      alt={client.company}
+                      className="w-12 h-12 rounded-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(client.company || 'Client')}&background=00704A&color=fff`;
+                      }}
+                    />
+                    {client.isVerified && (
+                      <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
+                        <CheckCircle size={16} className="text-green-500" />
+                      </div>
+                    )}
+                  </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">{client.name}</h3>
+                    <div className="flex items-center">
+                      <h3 className="font-semibold text-gray-900">{client.company}</h3>
+                      {client.isVerified && (
+                        <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                          Verified
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center mt-1">
                       <Building2 size={16} className="text-gray-400 mr-1" />
-                      <span className="text-sm text-gray-600">{client.company}</span>
+                      <span className="text-sm text-gray-600">{client.name}</span>
                     </div>
                   </div>
                 </div>

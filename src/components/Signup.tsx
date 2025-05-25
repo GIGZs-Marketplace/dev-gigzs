@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { User, Mail, Lock, Briefcase, AlertCircle } from 'lucide-react'
-import { supabase, supabaseAdmin, UserType } from '../lib/supabase'
+import { supabase, UserType } from '../lib/supabase'
 
 interface SignupProps {
   onSwitch: () => void
@@ -69,39 +69,59 @@ function Signup({ onSwitch, onSuccess }: SignupProps) {
 
       if (!user) throw new Error('Failed to create account')
 
-      // Sign in the user to establish the session
-      const { error: signInAfterSignUpError } = await supabase.auth.signInWithPassword({
+      // Log the full signUp response for debugging
+      console.log('signUp response:', { user, signUpError });
+
+      // Add a short delay before sign-in to allow backend propagation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Always attempt to sign in after signup (email verification disabled)
+      const { data: signInData, error: signInAfterSignUpError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
-      })
-
+      });
       if (signInAfterSignUpError) {
-        throw new Error('Failed to sign in after account creation')
+        console.error('signInAfterSignUpError:', signInAfterSignUpError);
+        // Clean up user if sign in fails
+        if (user) await supabase.auth.admin.deleteUser(user.id);
+        throw new Error('Failed to sign in after account creation');
       }
-
-      // Get the current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError) throw sessionError
-      if (!session) throw new Error('No session established')
+      const session = signInData?.session;
+      if (!session) {
+        // Clean up user if session not established
+        if (user) await supabase.auth.admin.deleteUser(user.id);
+        throw new Error('No session established');
+      }
 
       // Create profile based on account type using admin client
       try {
         if (formData.accountType === 'freelancer') {
-          const { error: profileError } = await supabaseAdmin
+          const { error: profileError } = await supabase
             .from('freelancer_profiles')
-            .insert([
+            .upsert(
               {
                 user_id: user.id,
                 full_name: formData.name,
-              }
-            ])
+                email: formData.email,
+                phone: '',
+                address: '',
+                city: '',
+                state: '',
+                country: 'India',
+                postal_code: '',
+                bio: '',
+                date_of_birth: null,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'user_id' }
+            )
             .select()
           if (profileError) {
             console.error('Error creating freelancer profile:', profileError)
             throw new Error('Failed to create freelancer profile')
           }
         } else {
-          const { error: profileError } = await supabaseAdmin
+          const { error: profileError } = await supabase
             .from('client_profiles')
             .insert([
               {

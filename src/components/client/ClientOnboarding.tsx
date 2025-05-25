@@ -43,7 +43,7 @@ function ClientOnboarding({ onComplete }: ClientOnboardingProps) {
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     step.number <= currentStep
-                      ? 'bg-[#00704A] text-white'
+                      ? 'bg-primary text-white'
                       : 'bg-gray-200 text-gray-500'
                   }`}
                 >
@@ -65,7 +65,7 @@ function ClientOnboarding({ onComplete }: ClientOnboardingProps) {
             {/* Progress Bar */}
             <div className="absolute top-5 left-0 h-0.5 bg-gray-200 w-full -z-10">
               <div
-                className="h-full bg-[#00704A] transition-all duration-300"
+                className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
               />
             </div>
@@ -84,7 +84,7 @@ function ClientOnboarding({ onComplete }: ClientOnboardingProps) {
             className={`flex items-center px-6 py-2 rounded-lg ${
               currentStep === 1
                 ? 'invisible'
-                : 'bg-white text-[#00704A] border-2 border-[#00704A] hover:bg-[#00704A] hover:text-white'
+                : 'bg-white text-[#00704A] border-2 border-[#00704A] hover:bg-primary hover:text-white'
             } transition-colors`}
           >
             <ArrowLeft size={20} className="mr-2" />
@@ -93,7 +93,7 @@ function ClientOnboarding({ onComplete }: ClientOnboardingProps) {
           {currentStep === totalSteps ? (
             <button
               onClick={onComplete}
-              className="flex items-center px-6 py-2 rounded-lg bg-[#00704A] text-white hover:bg-[#005538] transition-colors"
+              className="flex items-center px-6 py-2 rounded-lg bg-primary text-white hover:opacity-90 transition-colors"
             >
               Go to Dashboard
               <ArrowRight size={20} className="ml-2" />
@@ -101,7 +101,7 @@ function ClientOnboarding({ onComplete }: ClientOnboardingProps) {
           ) : (
             <button
               onClick={handleNext}
-              className="flex items-center px-6 py-2 rounded-lg bg-[#00704A] text-white hover:bg-[#005538] transition-colors"
+              className="flex items-center px-6 py-2 rounded-lg bg-primary text-white hover:opacity-90 transition-colors"
             >
               Next
               <ArrowRight size={20} className="ml-2" />

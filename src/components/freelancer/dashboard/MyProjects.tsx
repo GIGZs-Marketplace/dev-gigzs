@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Search, 
   Clock, 
@@ -9,7 +9,8 @@ import {
   BarChart,
   ExternalLink,
   Edit,
-  Plus
+  Info,
+  X
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 
@@ -24,6 +25,7 @@ interface Project {
   deadline: string
   budget: number
   progress: number
+  project_status: number
   description: string
   tasks: {
     total: number
@@ -31,6 +33,7 @@ interface Project {
   }
   lastUpdate: string
   startDate: string
+  code_url?: string
 }
 
 interface MyProjectsProps {
@@ -40,57 +43,35 @@ interface MyProjectsProps {
 function MyProjects({ onViewDetails }: MyProjectsProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newProject, setNewProject] = useState({
-    title: '',
-    description: '',
-    budget: 0
-  })
   const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProgress, setSelectedProgress] = useState<number>(0);
+  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+  const [uploadingProjectId, setUploadingProjectId] = useState<string | null>(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [projectRequirements, setProjectRequirements] = useState<string>('')
 
   useEffect(() => {
     const fetchProjects = async () => {
       setLoading(true)
       try {
-        // 1. Get current user
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('No user found')
-
-        // 2. Get freelancer profile
         const { data: freelancerProfile } = await supabase
           .from('freelancer_profiles')
           .select('id')
           .eq('user_id', user.id)
           .single()
         if (!freelancerProfile) throw new Error('Freelancer profile not found')
-
-        // 3. Fetch projects for this freelancer
+        // Fetch all projects assigned to this freelancer
         const { data: projectsData, error } = await supabase
           .from('projects')
-          .select(`
-            id,
-            title,
-            client_id,
-            status,
-            start_date,
-            end_date,
-            budget,
-            progress,
-            description,
-            lastUpdate: created_at,
-            startDate: start_date,
-            client_profiles ( company_name ),
-            job_application_id
-          `)
+          .select('*, client_profiles ( company_name )')
           .eq('freelancer_id', freelancerProfile.id)
-
         if (error) throw error
-
-        // 4. Map to Project[]
         const mappedProjects = (projectsData || []).map((proj: any) => {
           return {
             id: proj.id,
@@ -99,15 +80,16 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
             clientCompany: proj.client_profiles?.company_name || 'Client',
             status: proj.status as ProjectStatus,
             deadline: proj.end_date || proj.start_date || proj.created_at,
-            budget: proj.budget || 0,
-            progress: proj.progress ?? 0,
+            budget: proj.budget ?? 0, // Using only the budget field
+            progress: proj.project_status ?? 0,
+            project_status: proj.project_status ?? 0,
+            code_url: proj.code_url || '',
             description: proj.description || '',
-            tasks: { total: 0, completed: 0 }, // Fill if you have tasks
-            lastUpdate: proj.lastUpdate,
-            startDate: proj.startDate,
-          } as Project;
-        });
-
+            tasks: { total: 0, completed: 0 },
+            lastUpdate: proj.created_at,
+            startDate: proj.start_date,
+          } as Project & { code_url?: string, project_status?: number }
+        })
         setProjects(mappedProjects)
       } catch (err) {
         setProjects([])
@@ -115,7 +97,6 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
         setLoading(false)
       }
     }
-
     fetchProjects()
   }, [])
 
@@ -132,9 +113,12 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
 
   const filteredProjects = projects
     .filter(project => {
+      const title = project.title ? project.title.toLowerCase() : '';
+      const clientName = project.clientName ? project.clientName.toLowerCase() : '';
+      const search = searchTerm ? searchTerm.toLowerCase() : '';
       const matchesSearch = 
-        project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+        title.includes(search) ||
+        clientName.includes(search);
       let matchesStatus = true;
       if (statusFilter === 'ongoing') {
         matchesStatus = ['open', 'ongoing', 'in_progress'].includes(project.status)
@@ -158,13 +142,46 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
     setShowUpdateModal(true);
   };
 
-  // Helper to update progress in state
+  // Helper to show project details and requirements
+  const handleShowDetails = async (project: Project) => {
+    setSelectedProject(project);
+    setShowDetailsModal(true);
+    
+    try {
+      // Fetch project requirements using maybeSingle to handle no rows case
+      const { data, error } = await supabase
+        .from('project_requirements')
+        .select('requirements_text')
+        .eq('project_id', project.id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      // Handle case when no requirements exist
+      if (!data || !data.requirements_text) {
+        setProjectRequirements('No requirements added by client');
+      } else {
+        setProjectRequirements(data.requirements_text);
+      }
+    } catch (error) {
+      console.error('Error fetching project requirements:', error);
+      // Show user-friendly message for all error cases
+      setProjectRequirements('No requirements added by client');
+    }
+  }
+
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false)
+    setSelectedProject(null)
+    setProjectRequirements('')
+  }
+
   const handleUpdateProgress = async () => {
     if (!selectedProjectId) return;
-    // 1. Update in Supabase
+    // 1. Update in Supabase (use project_status)
     const { error } = await supabase
       .from('projects')
-      .update({ progress: selectedProgress })
+      .update({ project_status: selectedProgress })
       .eq('id', selectedProjectId);
     if (error) {
       alert('Failed to update progress. Please try again.');
@@ -174,7 +191,7 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
     setProjects((prev) =>
       prev.map((proj) =>
         proj.id === selectedProjectId
-          ? { ...proj, progress: selectedProgress }
+          ? { ...proj, progress: selectedProgress, project_status: selectedProgress }
           : proj
       )
     );
@@ -182,86 +199,88 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
     setSelectedProjectId(null);
   };
 
+  // Code upload handler
+  const handleCodeUpload = async (projectId: string, file: File) => {
+    setUploadingProjectId(projectId);
+    
+    try {
+      const BUCKET_NAME = 'project-code';
+      const filePath = `${projectId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      
+      // Try to upload the file
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        // If bucket doesn't exist, create it and retry
+        if (uploadError.message.includes('bucket')) {
+          const { error: createBucketError } = await supabase.storage.createBucket(BUCKET_NAME, {
+            public: false,
+            allowedMimeTypes: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
+            fileSizeLimit: 50 * 1024 * 1024, // 50MB limit
+          });
+          
+          if (createBucketError) throw createBucketError;
+          
+          // Retry the upload
+          const { error: retryError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: true,
+            });
+            
+          if (retryError) throw retryError;
+        } else {
+          throw uploadError;
+        }
+      }
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+      
+      if (!publicUrl) throw new Error('Failed to generate public URL');
+      
+      // Update project with code URL
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ 
+          code_url: publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', projectId);
+      
+      if (updateError) throw updateError;
+      
+      // Update local state
+      setProjects((prev) =>
+        prev.map((proj) =>
+          proj.id === projectId ? { ...proj, code_url: publicUrl } : proj
+        )
+      );
+      
+      alert('Code uploaded successfully!');
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      alert(`Failed to upload code: ${err.message || 'Please check your permissions and try again'}`);
+    } finally {
+      setUploadingProjectId(null);
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Projects</h1>
-          <p className="text-sm text-gray-600 mt-1">Track and manage your ongoing projects</p>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] transition-colors"
-        >
-          <Plus size={20} className="mr-2" />
-          Create Project
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">My Projects</h1>
+        <p className="text-sm text-gray-600 mt-1">Track and manage your ongoing projects</p>
       </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Create New Project</h2>
-            <form onSubmit={(e) => { e.preventDefault(); /* Handle project creation */ }} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Project Title
-                </label>
-                <input
-                  type="text"
-                  value={newProject.title}
-                  onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:border-[#00704A]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:border-[#00704A]"
-                  rows={4}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Budget ($)
-                </label>
-                <input
-                  type="number"
-                  value={newProject.budget}
-                  onChange={(e) => setNewProject({ ...newProject, budget: parseFloat(e.target.value) })}
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:border-[#00704A]"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] transition-colors"
-                >
-                  Create Project
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Search and Filters */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 mb-6">
@@ -314,7 +333,7 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
                     <div className="flex items-center">
                       <Building2 size={16} className="mr-1" />
-                      <span>{project.clientCompany}</span>
+                      <span>{project.clientCompany || 'N/A'}</span>
                     </div>
                     <div className="flex items-center">
                       <Calendar size={16} className="mr-1" />
@@ -323,14 +342,7 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <button className="p-2 text-gray-400 hover:text-[#00704A] rounded-lg hover:bg-gray-50">
-                    <Edit size={20} />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-[#00704A] rounded-lg hover:bg-gray-50">
-                    <ExternalLink size={20} />
-                  </button>
-                </div>
+
               </div>
 
               <div className="mt-4 grid grid-cols-4 gap-4">
@@ -345,7 +357,7 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
                   <DollarSign className="text-gray-400" size={18} />
                   <div>
                     <p className="text-xs text-gray-500">Budget</p>
-                    <p className="text-sm font-medium">${project.budget.toLocaleString()}</p>
+                    <p className="text-sm font-medium">{project.budget != null ? `$${project.budget.toLocaleString()}` : 'N/A'}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -368,86 +380,147 @@ function MyProjects({ onViewDetails }: MyProjectsProps) {
               <div className="mt-4">
                 <div className="flex justify-between mb-2">
                   <span className="text-sm text-gray-600">Progress</span>
-                  <span className="text-sm font-medium">{project.progress}%</span>
+                  <span className="text-sm font-medium">{typeof project.project_status === 'number' ? project.project_status : 0}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-[#00704A] h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${project.progress}%` }}
+                    style={{ width: `${typeof project.project_status === 'number' ? project.project_status : 0}%` }}
                   />
                 </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <button
-                      className="flex items-center text-gray-600 hover:text-[#00704A]"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('navigate', { detail: { section: 'messages' } }));
+                {/* Upload code button only visible at 75% or higher */}
+                {(typeof project.project_status === 'number' ? project.project_status : 0) >= 75 && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <input
+                      type="file"
+                      ref={(el: HTMLInputElement | null) => { fileInputRefs.current[project.id] = el; return undefined; }}
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleCodeUpload(project.id, e.target.files[0])
+                        }
                       }}
+                    />
+                    <button
+                      className="px-3 py-1 bg-[#00704A] text-white rounded text-sm disabled:opacity-50"
+                      onClick={() => fileInputRefs.current[project.id]?.click()}
+                      disabled={uploadingProjectId === project.id}
                     >
-                      <MessageSquare size={18} className="mr-1" />
-                      <span>Message Client</span>
+                      {uploadingProjectId === project.id ? 'Uploading...' : 'Upload Code'}
                     </button>
-                    {['open', 'ongoing', 'in_progress'].includes(project.status) && (
-                      <button
-                        className="flex items-center text-gray-600 hover:text-[#00704A]"
-                        onClick={() => handleOpenUpdateModal(project.id, project.progress)}
-                      >
-                        <Edit size={18} className="mr-1" />
-                        <span>Update Status</span>
-                      </button>
+                    {project.code_url && (
+                      <a href={project.code_url} target="_blank" rel="noopener noreferrer" className="text-[#00704A] underline ml-2">View Code</a>
                     )}
                   </div>
+                )}
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center space-x-4">
                   <button
-                    onClick={() => onViewDetails(project.id)}
-                    className="flex items-center text-[#00704A] hover:text-[#005538]"
+                    className="flex items-center text-gray-600 hover:text-[#00704A]"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('navigate', { detail: { section: 'messages' } }));
+                    }}
                   >
-                    <span>View Details</span>
-                    <ExternalLink size={18} className="ml-1" />
+                    <MessageSquare size={18} className="mr-1" />
+                    <span>Message Client</span>
                   </button>
+                  
+                  <button
+                    className="flex items-center text-gray-600 hover:text-blue-600"
+                    onClick={() => handleShowDetails(project)}
+                  >
+                    <Info size={18} className="mr-1" />
+                    <span>Requirements</span>
+                  </button>
+
+                  {['open', 'ongoing', 'in_progress'].includes(project.status) && (
+                    <button
+                      className="flex items-center text-gray-600 hover:text-[#00704A]"
+                      onClick={() => handleOpenUpdateModal(project.id, project.project_status)}
+                    >
+                      <Edit size={18} className="mr-1" />
+                      <span>Update Status</span>
+                    </button>
+                  )}
                 </div>
               </div>
-           
-            ))
-          )}
-        </div>
-
-        {/* Update Progress Modal */}
-        {showUpdateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-            <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
-              <h3 className="text-lg font-semibold mb-4">Update Project Progress</h3>
-              <div className="flex flex-col space-y-3 mb-6">
-                {[25, 50, 75, 100].map((val) => (
-                  <button
-                    key={val}
-                    className={`px-4 py-2 rounded-lg border ${selectedProgress === val ? 'bg-[#00704A] text-white' : 'bg-white text-gray-800'} hover:bg-[#00704A]/10`}
-                    onClick={() => setSelectedProgress(val)}
-                  >
-                    {val}%
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                  onClick={() => setShowUpdateModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
-                  onClick={handleUpdateProgress}
-                  disabled={selectedProjectId === null}
-                >
-                  Update
-                </button>
-              </div>
             </div>
-          </div>
+          ))
         )}
       </div>
-    
+
+      {/* Project Requirements Modal */}
+      {showDetailsModal && selectedProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white p-6 pb-4 border-b flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Project Requirements</h3>
+                <p className="text-sm text-gray-500 mt-1">{selectedProject.title}</p>
+              </div>
+              <button 
+                onClick={closeDetailsModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Client's Requirements:</h4>
+                <div className="prose max-w-none text-gray-700 whitespace-pre-line">
+                  {projectRequirements}
+                </div>
+              </div>
+            </div>
+            <div className="p-6 pt-0 flex justify-end">
+              <button
+                onClick={closeDetailsModal}
+                className="px-4 py-2 text-white bg-[#00704A] rounded-lg hover:bg-[#005538]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Progress Modal */}
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">Update Project Progress</h3>
+            <div className="flex flex-col space-y-3 mb-6">
+              {[25, 50, 75, 100].map((val) => (
+                <button
+                  key={val}
+                  className={`px-4 py-2 rounded-lg border ${selectedProgress === val ? 'bg-[#00704A] text-white' : 'bg-white text-gray-800'} hover:bg-[#00704A]/10`}
+                  onClick={() => setSelectedProgress(val)}
+                >
+                  {val}%
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                onClick={() => setShowUpdateModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+                onClick={handleUpdateProgress}
+                disabled={selectedProjectId === null}
+              >
+                Update
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

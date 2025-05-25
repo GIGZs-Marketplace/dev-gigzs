@@ -48,8 +48,8 @@ function Reports() {
       {
         label: 'Earnings',
         data: [4500, 5200, 4800, 6100, 5800, 7200],
-        borderColor: '#00704A',
-        backgroundColor: 'rgba(0, 112, 74, 0.1)',
+        borderColor: 'var(--primary-color)',
+        backgroundColor: 'var(--primary-color)10',
         tension: 0.4,
         fill: true
       }

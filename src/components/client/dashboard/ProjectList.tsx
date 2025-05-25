@@ -4,89 +4,65 @@ import { supabase } from '../../../lib/supabase'
 import PostJob from './PostJob'
 
 function ProjectList() {
-  const [projects, setProjects] = useState<any[]>([])
+  const [jobs, setJobs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showPostJob, setShowPostJob] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
-  const fetchProjects = async () => {
-    try {
+  useEffect(() => {
+    const fetchJobs = async () => {
+      setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data: clientProfile } = await supabase
+      if (!user) {
+        setJobs([])
+        setLoading(false)
+        return
+      }
+      // Fetch client profile id for this user
+      const { data: clientProfile, error: profileError } = await supabase
         .from('client_profiles')
         .select('id')
         .eq('user_id', user.id)
         .single()
-
-      if (!clientProfile) return
-
-      // First get all jobs
-      const { data: jobs, error: jobsError } = await supabase
+      if (profileError || !clientProfile) {
+        setJobs([])
+        setLoading(false)
+        return
+      }
+      // Now fetch jobs using client profile id
+      const { data: jobsData, error: jobsError } = await supabase
         .from('jobs')
-        .select(`
-          *,
-          freelancer:freelancer_id (
-            id,
-            full_name,
-            professional_title
-          )
-        `)
+        .select('*')
         .eq('client_id', clientProfile.id)
         .order('created_at', { ascending: false })
-
-      if (jobsError) throw jobsError
-
-      // Then get application counts for each job
-      const jobsWithApplications = await Promise.all(
-        (jobs || []).map(async (job) => {
-          const { count } = await supabase
-            .from('job_applications')
-            .select('*', { count: 'exact', head: true })
-            .eq('job_id', job.id)
-
-          return {
-            ...job,
-            applications_count: count
-          }
-        })
-      )
-
-      setProjects(jobsWithApplications || [])
-    } catch (error) {
-      console.error('Error fetching projects:', error)
-    } finally {
+      if (jobsError || !jobsData) {
+        setJobs([])
+        setLoading(false)
+        return
+      }
+      // For each job, fetch the number of applications
+      const jobsWithApplications = await Promise.all(jobsData.map(async (job) => {
+        const { count, error: countError } = await supabase
+          .from('job_applications')
+          .select('*', { count: 'exact', head: true })
+          .eq('job_id', job.id)
+        return {
+          ...job,
+          applications_count: countError ? 0 : (count ?? 0)
+        }
+      }))
+      setJobs(jobsWithApplications)
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    fetchProjects()
+    fetchJobs()
   }, [])
 
-  const filteredProjects = projects.filter(project => {
-    const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         project.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filterStatus === 'all' || project.status === filterStatus
+  const filteredJobs = jobs.filter(job => {
+    const matchesSearch = (job.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFilter = filterStatus === 'all' || job.status === filterStatus
     return matchesSearch && matchesFilter
   })
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'open':
-        return 'bg-emerald-100 text-emerald-800'
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800'
-      case 'completed':
-        return 'bg-gray-100 text-gray-800'
-      case 'cancelled':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   if (loading) {
     return (
@@ -97,131 +73,74 @@ function ProjectList() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Search and Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-wrap items-center justify-between gap-6 mb-6">
+        <div className="flex items-center space-x-6">
           <div className="relative">
             <input
               type="text"
-              placeholder="Search projects..."
+              placeholder="Search jobs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-64 focus:outline-none focus:border-[#00704A]"
+              className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl w-80 focus:outline-none focus:border-[#00704A] text-lg shadow-sm"
             />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+            <Search className="absolute left-4 top-3 text-gray-400" size={22} />
           </div>
-          
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-[#00704A] text-lg shadow-sm"
           >
             <option value="all">All Status</option>
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
           </select>
         </div>
 
         <button
           onClick={() => setShowPostJob(true)}
-          className="flex items-center px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
+          className="flex items-center px-6 py-3 bg-[#00704A] text-white rounded-xl hover:bg-[#005538] text-lg font-semibold shadow-md transition-all duration-300"
         >
-          <Plus size={20} className="mr-2" />
+          <Plus size={24} className="mr-2" />
           Post New Job
         </button>
       </div>
 
-      {/* Projects List */}
-      <div className="space-y-4">
-        {filteredProjects.length === 0 ? (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900">No projects found</h3>
-            <p className="mt-2 text-sm text-gray-500">
-              Get started by posting your first job
-            </p>
-            <button
-              onClick={() => setShowPostJob(true)}
-              className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#00704A] hover:bg-[#005538]"
-            >
-              <Plus size={20} className="mr-2" />
-              Post a Job
-            </button>
+      {/* Jobs Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        {filteredJobs.length === 0 ? (
+          <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-md">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">No jobs found</h3>
+            <p className="text-sm text-gray-500">Jobs you post will appear here.</p>
           </div>
         ) : (
-          filteredProjects.map((project) => (
-            <div 
-              key={project.id} 
-              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition-all duration-300 cursor-pointer group"
+          filteredJobs.map((job) => (
+            <div
+              key={job.id}
+              className="bg-white rounded-2xl border border-gray-200 p-8 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between min-h-[260px] group cursor-pointer"
             >
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-3">
-                    <h3 className="text-lg font-semibold text-gray-900 group-hover:text-[#00704A] transition-colors">
-                      {project.title}
-                    </h3>
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(project.status)}`}>
-                      {project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.slice(1)}
-                    </span>
-                  </div>
-                  <p className="text-gray-600 line-clamp-2">{project.description}</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full">
-                    <MoreVertical size={20} />
-                  </button>
-                  <ChevronRight size={20} className="text-gray-300 group-hover:text-[#00704A] transition-colors" />
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-gray-900 group-hover:text-primary transition-colors duration-200">{job.title}</h3>
+                <span className="px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-sm font-medium shadow-sm">{job.applications_count} Applications</span>
               </div>
-              
-              <div className="mt-4 flex flex-wrap gap-2">
-                {project.skills_required?.map((skill: string, index: number) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-gray-50 text-gray-700 rounded-full text-sm border border-gray-200"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-6 grid grid-cols-4 gap-4">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-violet-50 rounded-lg">
-                    <DollarSign className="text-violet-500" size={18} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Budget</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      ${project.budget_amount}
-                      {project.budget_type === 'hourly' && '/hr'}
-                    </p>
-                  </div>
+              <p className="text-gray-700 text-sm mb-6 line-clamp-3">{job.description}</p>
+              <div className="flex flex-wrap gap-6 mt-auto">
+                <div className="flex items-center gap-2 text-gray-600 text-sm">
+                  <Clock size={20} className="text-gray-400" />
+                  <span>Start:</span>
+                  <span className="font-medium text-gray-900">{job.start_date ? new Date(job.start_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-amber-50 rounded-lg">
-                    <Clock className="text-amber-500" size={18} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Duration</p>
-                    <p className="text-sm font-medium text-gray-900">{project.duration.replace('_', ' ')}</p>
-                  </div>
+                <div className="flex items-center gap-2 text-gray-600 text-sm">
+                  <Clock size={20} className="text-gray-400" />
+                  <span>End:</span>
+                  <span className="font-medium text-gray-900">{job.end_date ? new Date(job.end_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-emerald-50 rounded-lg">
-                    <Users className="text-emerald-500" size={18} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Applications</p>
-                    <p className="text-sm font-medium text-gray-900">{project.applications_count || 0}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button className="w-full px-4 py-2 text-sm font-medium text-[#00704A] bg-[#00704A]/10 rounded-lg hover:bg-[#00704A]/20 transition-colors">
-                    View Details
-                  </button>
+                <div className="flex items-center gap-2 text-gray-600 text-sm">
+                  <DollarSign size={20} className="text-gray-400" />
+                  <span>Budget:</span>
+                  <span className="font-medium text-gray-900">{job.budget != null ? `$${job.budget}` : 'N/A'}</span>
                 </div>
               </div>
             </div>
@@ -234,7 +153,6 @@ function ProjectList() {
         <PostJob 
           onClose={() => setShowPostJob(false)} 
           onJobPosted={() => {
-            fetchProjects()
             setShowPostJob(false)
           }}
         />

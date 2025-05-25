@@ -20,7 +20,9 @@ interface Review {
   client_name?: string
   client_avatar?: string
   project_title?: string
-  comment?: string
+  review_text: string;
+  rating: number;
+  would_rehire: boolean;
 }
 
 function Reviews() {
@@ -54,7 +56,7 @@ function Reviews() {
       if (profileError) throw profileError;
       if (!freelancerProfile) throw new Error('Freelancer profile not found');
 
-      // Get reviews without joining jobs
+      // Get reviews with project and client info (join on project_id)
       const { data: reviewsData, error: reviewsError } = await supabase
         .from('reviews_freelancer')
         .select(`
@@ -64,29 +66,27 @@ function Reviews() {
           value,
           completed,
           skills_used,
-          job_id
+          project_id,
+          review_text,
+          rating,
+          would_rehire,
+          projects (
+            title,
+            client_id,
+            client_profiles ( company_name )
+          )
         `)
         .eq('freelancer_id', freelancerProfile.id);
 
       if (reviewsError) throw reviewsError;
 
-      // Fetch job titles separately
-      const jobIds = reviewsData.map((review: any) => review.job_id);
-      const { data: jobsData, error: jobsError } = await supabase
-        .from('jobs')
-        .select('id, title')
-        .in('id', jobIds);
-
-      if (jobsError) throw jobsError;
-
-      const jobMap = jobsData.reduce((acc: any, job: any) => {
-        acc[job.id] = job.title;
-        return acc;
-      }, {});
-
       const normalizedReviews = (reviewsData || []).map((review: any) => ({
         ...review,
-        project_title: jobMap[review.job_id] || 'Project'
+        project_title: review.projects?.title || 'Project',
+        client_name: review.projects?.client_profiles?.company_name || '',
+        review_text: typeof review.review_text === 'string' ? review.review_text : '',
+        rating: typeof review.rating === 'number' ? review.rating : Number(review.rating) || 0,
+        would_rehire: review.would_rehire === true || review.would_rehire === 'true',
       }));
 
       setReviews(normalizedReviews);
@@ -145,7 +145,6 @@ function Reviews() {
       const searchLower = searchTerm.toLowerCase();
       return (
         review.project_title?.toLowerCase().includes(searchLower) ||
-        review.comment?.toLowerCase().includes(searchLower) ||
         (Array.isArray(review.skills_used) && review.skills_used.some(skill =>
           skill?.toLowerCase().includes(searchLower)
         ))
@@ -181,7 +180,7 @@ function Reviews() {
                 placeholder="Search reviews..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
               />
               <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
             </div>
@@ -192,7 +191,7 @@ function Reviews() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
             >
               <option value="recent">Most Recent</option>
               <option value="value">Project Value</option>
@@ -230,7 +229,7 @@ function Reviews() {
                       type="text"
                       value={editForm.duration || ''}
                       onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div>
@@ -241,7 +240,7 @@ function Reviews() {
                       type="text"
                       value={editForm.value || ''}
                       onChange={(e) => setEditForm({ ...editForm, value: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div>
@@ -252,7 +251,7 @@ function Reviews() {
                       type="date"
                       value={editForm.completed || ''}
                       onChange={(e) => setEditForm({ ...editForm, completed: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div>
@@ -266,7 +265,7 @@ function Reviews() {
                         ...editForm, 
                         skills_used: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
                       })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="flex justify-end space-x-3">
@@ -352,11 +351,37 @@ function Reviews() {
                     </div>
                   </div>
 
-                  {review.comment && (
-                    <div className="mt-4 text-gray-600">
-                      {review.comment}
+                  {/* Review Text */}
+                  {typeof review.review_text === 'string' && review.review_text.trim() && (
+                    <div className="mt-4 text-gray-700 text-base">
+                      <span className="font-semibold">Review:</span> {review.review_text}
                     </div>
                   )}
+
+                  {/* Rating */}
+                  <div className="mt-2 flex items-center">
+                    <span className="font-semibold mr-2">Rating:</span>
+                    {[1,2,3,4,5].map((star) => (
+                      <svg
+                        key={star}
+                        className={`h-5 w-5 ${Number(review.rating) >= star ? 'text-yellow-400' : 'text-gray-300'}`}
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.18c.969 0 1.371 1.24.588 1.81l-3.39 2.46a1 1 0 00-.364 1.118l1.287 3.966c.3.921-.755 1.688-1.54 1.118l-3.39-2.46a1 1 0 00-1.175 0l-3.39 2.46c-.784.57-1.838-.197-1.539-1.118l1.287-3.966a1 1 0 00-.364-1.118l-3.39-2.46c-.783-.57-.38-1.81.588-1.81h4.18a1 1 0 00.95-.69l1.286-3.967z" />
+                      </svg>
+                    ))}
+                  </div>
+
+                  {/* Would Rehire */}
+                  <div className="mt-2 flex items-center">
+                    <span className="font-semibold mr-2">Would Rehire:</span>
+                    {String(review.would_rehire) === "true" || review.would_rehire === true ? (
+                      <span className="text-green-600 font-medium flex items-center"><svg className="h-5 w-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Yes</span>
+                    ) : (
+                      <span className="text-red-600 font-medium flex items-center"><svg className="h-5 w-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>No</span>
+                    )}
+                  </div>
                 </>
               )}
             </div>

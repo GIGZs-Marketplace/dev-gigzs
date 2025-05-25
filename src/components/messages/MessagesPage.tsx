@@ -1,12 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Search, Phone, Video, MoreVertical, Send, Paperclip, Image as ImageIcon, Smile, ChevronDown } from 'lucide-react';
-import {supabase} from '../../lib/supabase';
+import React, { useEffect, useState, useRef, ChangeEvent } from 'react';
+import { Search, Phone, Video, MoreVertical, Send, Paperclip, Smile, ChevronDown, File, X } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import BitmojiAvatar from '../common/BitmojiAvatar';
 
 interface Chat {
   id: string;
   created_at: string;
   participant_one: string;
   participant_two: string;
+  client_company_name?: string | null;
 }
 
 interface Message {
@@ -15,6 +18,9 @@ interface Message {
   content: string;
   created_at: string;
   sender_id: string;
+  file_url?: string;
+  file_name?: string;
+  file_type?: string;
 }
 
 interface MessagesPageProps {
@@ -28,6 +34,11 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
   const [message, setMessage] = useState('');
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [uploadingFile, setUploadingFile] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +48,7 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
   const messagesEndRef = useRef(null);
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const getUser = async () => {
@@ -233,28 +245,153 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
     }
   };
 
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleAttachmentClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+  
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setMessage(prev => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+  };
+  
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    try {
+      setUploadingFile(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `chat-attachments/${fileName}`;
+
+      console.log('Uploading file:', file.name, 'to path:', filePath);
+      
+      // Note: We're using the existing 'chat-files' bucket instead of trying to create a new one
+      // Only Supabase administrators can create buckets, not regular users
+
+      // Upload the file to the 'avatars' bucket which should already exist
+      // We'll use a subfolder 'chat-attachments' to keep things organized
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('Error uploading file:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('File uploaded successfully:', uploadData);
+
+      // Get the public URL from the 'avatars' bucket
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      
+      console.log('Generated public URL:', data.publicUrl);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Failed to upload file. Please try again.');
+      return null;
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedChat || !userId || !message.trim()) return;
-    // Optimistically add message
-    const optimisticMsg: Message = {
-      id: `optimistic-${Date.now()}`,
-      chat_id: selectedChat.id,
-      content: message.trim(),
-      created_at: new Date().toISOString(),
-      sender_id: userId,
-    };
-    setMessages((msgs) => [...msgs, optimisticMsg]);
-    setMessage('');
+    if ((!message.trim() && !selectedFile) || !selectedChat || !userId) return;
+
     try {
-      const { error } = await supabase
+      console.log('Sending message with file:', selectedFile?.name);
+      setUploadingFile(true);
+      
+      let fileUrl = null;
+      let fileName = null;
+      let fileType = null;
+
+      // Handle file upload if a file is selected
+      if (selectedFile) {
+        console.log('Uploading file before sending message...');
+        fileUrl = await uploadFile(selectedFile);
+        
+        if (!fileUrl) {
+          console.error('Failed to get file URL after upload');
+          alert('Failed to upload file. Please try again.');
+          setUploadingFile(false);
+          return;
+        }
+        
+        fileName = selectedFile.name;
+        fileType = selectedFile.type;
+        console.log('File uploaded successfully, URL:', fileUrl);
+      }
+
+      // Create the message object
+      const newMessage = {
+        id: crypto.randomUUID(),
+        chat_id: selectedChat.id,
+        content: message,
+        sender_id: userId,
+        created_at: new Date().toISOString(),
+        file_url: fileUrl,
+        file_name: fileName,
+        file_type: fileType
+      };
+
+      console.log('Inserting message with data:', newMessage);
+      
+      // Insert the message into the database
+      const { error, data } = await supabase
         .from('messages')
-        .insert([{ chat_id: selectedChat.id, content: optimisticMsg.content, sender_id: userId }]);
-      if (error) throw error;
-      // Fallback: re-fetch messages to ensure consistency
+        .insert(newMessage)
+        .select();
+
+      if (error) {
+        console.error('Error inserting message:', error);
+        throw error;
+      }
+      
+      console.log('Message inserted successfully:', data);
+      
+      // Clear the selected file
+      setSelectedFile(null);
+      
+      // Fetch messages again to ensure we have the latest data
       fetchMessages();
-    } catch (error: any) {
-      setError(error.message);
+      setMessage('');
+      setUploadingFile(false);
+
+      // Scroll to bottom
+      if (messagesEndRef.current) {
+        (messagesEndRef.current as any).scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
     }
   };
 
@@ -364,42 +501,163 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
     fetchContacts();
   }, [userId, userType]);
 
-  // Fetch other users' info for chat display
+  // Update the fetchOtherUsersInfo function
   const fetchOtherUsersInfo = async (otherIds: string[]) => {
     let userMap: Record<string, { name?: string; email?: string }> = {};
     if (otherIds.length > 0) {
-      // Try freelancer_profiles
+      // Try freelancer_profiles first
       const { data: freelancers, error: fpError } = await supabase
         .from('freelancer_profiles')
-        .select('user_id, full_name')
+        .select('user_id, full_name, email')
         .in('user_id', otherIds);
-      console.log('Freelancer names:', freelancers, 'Error:', fpError);
+      
       if (freelancers) {
         freelancers.forEach((f: any) => {
-          userMap[f.user_id] = { name: f.full_name };
+          userMap[f.user_id] = { 
+            name: f.full_name,
+            email: f.email 
+          };
         });
       }
-      // Try client_profiles
+
+      // Then try client_profiles
       const { data: clients, error: cpError } = await supabase
         .from('client_profiles')
-        .select('user_id, company_name')
+        .select('user_id, company_name, email')
         .in('user_id', otherIds);
-      console.log('Client names:', clients, 'Error:', cpError);
+      
       if (clients) {
         clients.forEach((c: any) => {
-          userMap[c.user_id] = { name: c.company_name };
+          // If we already have a freelancer profile for this user, don't overwrite it
+          if (!userMap[c.user_id]) {
+            userMap[c.user_id] = { 
+              name: c.company_name,
+              email: c.email 
+            };
+          }
         });
+      }
+
+      // Finally, try to get any remaining users from auth.users
+      const remainingIds = otherIds.filter(id => !userMap[id]);
+      if (remainingIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id, email')
+          .in('id', remainingIds);
+        
+        if (users) {
+          users.forEach((u: any) => {
+            if (!userMap[u.id]) {
+              userMap[u.id] = { 
+                email: u.email 
+              };
+            }
+          });
+        }
       }
     }
     return userMap;
   };
 
-  // Fix chat display logic: always show correct name
-  const getDisplayName = (otherId: string) => {
+  // Function to fetch and cache display names
+  const fetchAndCacheDisplayNames = async (userIds: string[]) => {
+    if (userIds.length === 0) return;
+    
+    try {
+      // First check client_profiles
+      const { data: clientProfiles } = await supabase
+        .from('client_profiles')
+        .select('user_id, full_name')
+        .in('user_id', userIds);
+        
+      // Then check freelancer_profiles
+      const { data: freelancerProfiles } = await supabase
+        .from('freelancer_profiles')
+        .select('user_id, full_name')
+        .in('user_id', userIds);
+        
+      // Update display names with found profiles
+      const newDisplayNames: Record<string, string> = {};
+      
+      // Process client profiles
+      clientProfiles?.forEach(profile => {
+        if (profile.full_name) {
+          newDisplayNames[profile.user_id] = profile.full_name;
+        }
+      });
+      
+      // Process freelancer profiles (only if not already found in client profiles)
+      freelancerProfiles?.forEach(profile => {
+        if (profile.full_name && !newDisplayNames[profile.user_id]) {
+          newDisplayNames[profile.user_id] = profile.full_name;
+        }
+      });
+      
+      // Update state with new display names
+      if (Object.keys(newDisplayNames).length > 0) {
+        setDisplayNames(prev => ({
+          ...prev,
+          ...newDisplayNames
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching display names:', error);
+    }
+  };
+  
+  // Effect to fetch display names when chats change
+  useEffect(() => {
+    if (chats.length === 0) return;
+    
+    // Collect all unique user IDs from chats
+    const userIds = new Set<string>();
+    chats.forEach(chat => {
+      userIds.add(chat.participant_one);
+      userIds.add(chat.participant_two);
+    });
+    
+    // Filter out users whose names we already have
+    const userIdsToFetch = Array.from(userIds).filter(id => 
+      id && 
+      !displayNames[id] && 
+      (!otherUsers[id]?.name) && 
+      !contacts.some(c => c.user_id === id)
+    );
+    
+    if (userIdsToFetch.length > 0) {
+      fetchAndCacheDisplayNames(userIdsToFetch);
+    }
+  }, [chats, otherUsers, contacts]);
+
+  // Get display name from cache or other sources
+  const getDisplayName = (otherId: string, chat?: Chat | null) => {
+    // Check cached display names first
+    if (displayNames[otherId]) {
+      return displayNames[otherId];
+    }
+    
+    // Check other sources synchronously
     const otherInfo = otherUsers[otherId];
-    if (otherInfo?.name) return otherInfo.name;
-    if (otherInfo?.email) return otherInfo.email;
-    return 'Unknown User';
+    if (otherInfo?.name?.trim()) {
+      return otherInfo.name;
+    }
+    
+    const contact = contacts.find(c => c.user_id === otherId);
+    if (contact?.name?.trim()) {
+      return contact.name;
+    }
+    
+    if (chat?.client_company_name?.trim()) {
+      return chat.client_company_name;
+    }
+    
+    if (otherInfo?.email?.trim()) {
+      return otherInfo.email;
+    }
+    
+    // Fallback to shortened ID
+    return `User (${otherId.slice(0, 6)})`;
   };
 
   // Handler to start a new chat
@@ -472,7 +730,7 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
                 <ul>
                   {chats.map((chat) => {
                     const otherId = chat.participant_one === userId ? chat.participant_two : chat.participant_one;
-                    const displayName = getDisplayName(otherId);
+                    const displayName = getDisplayName(otherId, chat);
                     const isActive = activeChatUserIds.has(otherId);
                     return (
                       <li
@@ -480,9 +738,7 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
                         className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 ${selectedChat?.id === chat.id ? 'bg-gray-100' : ''}`}
                         onClick={() => setSelectedChat(chat)}
                       >
-                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold">
-                          {displayName[0]?.toUpperCase() || 'U'}
-                        </div>
+                        <BitmojiAvatar userId={otherId} size={40} />
                         <div>
                           <div className="font-semibold flex items-center gap-2">
                             {displayName}
@@ -507,27 +763,20 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
               <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                 {selectedChat && (
                   <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold">
-                      {(() => {
-                        const otherId = selectedChat.participant_one === userId ? selectedChat.participant_two : selectedChat.participant_one;
-                        const otherInfo = otherUsers[otherId];
-                        const displayName = otherInfo?.name || otherInfo?.email || `Chat ${selectedChat.id.slice(-6)}`;
-                        return displayName[0]?.toUpperCase() || 'U';
-                      })()}
-                    </div>
+                    <BitmojiAvatar 
+                      userId={selectedChat.participant_one === userId ? selectedChat.participant_two : selectedChat.participant_one} 
+                      size={40} 
+                    />
                     <div className="flex-1">
                       <div className="font-semibold">
                         {(() => {
                           const otherId = selectedChat.participant_one === userId ? selectedChat.participant_two : selectedChat.participant_one;
-                          const otherInfo = otherUsers[otherId];
-                          return otherInfo?.name || otherInfo?.email || `Chat ${selectedChat.id.slice(-6)}`;
+                          const displayName = getDisplayName(otherId, selectedChat);
+                          return displayName;
                         })()}
                       </div>
                       <div className="text-xs text-green-600">Online</div>
                     </div>
-                    <Phone className="w-5 h-5 mx-2 cursor-pointer text-gray-400" />
-                    <Video className="w-5 h-5 mx-2 cursor-pointer text-gray-400" />
-                    <MoreVertical className="w-5 h-5 mx-2 cursor-pointer text-gray-400" />
                   </div>
                 )}
               </div>
@@ -551,8 +800,35 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
                             : 'bg-gray-100 text-gray-900'
                         }`}
                       >
-                        <p>{msg.content}</p>
-                        <p className={`text-xs mt-1 ${msg.sender_id === userId ? 'text-[#00704A]/75' : 'text-gray-500'}`}>
+                        {msg.content && <p>{msg.content}</p>}
+                        
+                        {msg.file_url && (
+                          <div className="mt-2">
+                            {msg.file_type?.startsWith('image/') ? (
+                              <a href={msg.file_url} target="_blank" rel="noopener noreferrer">
+                                <img 
+                                  src={msg.file_url} 
+                                  alt="Attached image" 
+                                  className="max-w-full rounded-md max-h-48 object-contain"
+                                />
+                              </a>
+                            ) : (
+                              <a 
+                                href={msg.file_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className={`flex items-center p-2 rounded-md ${msg.sender_id === userId ? 'bg-[#005538]' : 'bg-gray-200'}`}
+                              >
+                                <File size={16} className={`mr-2 ${msg.sender_id === userId ? 'text-white' : 'text-gray-600'}`} />
+                                <span className={`text-sm ${msg.sender_id === userId ? 'text-white' : 'text-gray-800'}`}>
+                                  {msg.file_name || 'Attachment'}
+                                </span>
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        
+                        <p className={`text-xs mt-1 ${msg.sender_id === userId ? 'text-white/75' : 'text-gray-500'}`}>
                           {new Date(msg.created_at).toLocaleTimeString()}
                         </p>
                       </div>
@@ -565,12 +841,26 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
               {/* Message Input */}
               <form onSubmit={sendMessage} className="p-4 border-t border-gray-200">
                 <div className="flex items-center space-x-2">
-                  <button type="button" className="p-2 hover:bg-gray-100 rounded-full">
-                    <Paperclip size={20} className="text-gray-600" />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <button 
+                    type="button" 
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                    onClick={handleAttachmentClick}
+                    disabled={uploadingFile}
+                  >
+                    <Paperclip size={20} className={uploadingFile ? "text-gray-400" : "text-gray-600"} />
                   </button>
-                  <button type="button" className="p-2 hover:bg-gray-100 rounded-full">
-                    <ImageIcon size={20} className="text-gray-600" />
-                  </button>
+                  {selectedFile && (
+                    <div className="flex items-center px-2 py-1 bg-gray-100 rounded-md">
+                      <File size={16} className="mr-1 text-gray-600" />
+                      <span className="text-xs truncate max-w-[100px]">{selectedFile.name}</span>
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={message}
@@ -578,9 +868,32 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
                     placeholder="Type a message..."
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
                   />
-                  <button type="button" className="p-2 hover:bg-gray-100 rounded-full">
-                    <Smile size={20} className="text-gray-600" />
-                  </button>
+                  <div className="relative">
+                    <button 
+                      type="button" 
+                      className="p-2 hover:bg-gray-100 rounded-full"
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    >
+                      <Smile size={20} className="text-gray-600" />
+                    </button>
+                    
+                    {showEmojiPicker && (
+                      <div 
+                        ref={emojiPickerRef}
+                        className="absolute bottom-12 right-0 z-10"
+                      >
+                        <div className="relative">
+                          <button 
+                            onClick={() => setShowEmojiPicker(false)}
+                            className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md z-10"
+                          >
+                            <X size={16} />
+                          </button>
+                          <EmojiPicker onEmojiClick={handleEmojiClick} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="submit"
                     className="p-2 bg-[#00704A] text-white rounded-full hover:bg-[#005538]"
@@ -623,11 +936,7 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
                               className="flex items-center gap-3 p-2 hover:bg-gray-100 cursor-pointer rounded"
                               onClick={() => handleStartChat(c)}
                             >
-                              <img
-                                src={c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.email || 'User')}`}
-                                alt={c.name || c.email || 'User'}
-                                className="w-8 h-8 rounded-full"
-                              />
+                              <BitmojiAvatar userId={c.user_id} size={32} />
                               <span className="font-medium">{c.name || c.email || 'User'}</span>
                             </li>
                           );
@@ -645,5 +954,10 @@ function MessagesPage({ initialUserId }: MessagesPageProps) {
     </div>
   )
 }
+
+// NOTE FOR BACKEND:
+// To ensure chat is created when a project is created and deleted when project ends,
+// add database triggers (see documentation or ask devops for SQL examples).
+// This ensures only active project pairs can chat.
 
 export default MessagesPage

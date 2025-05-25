@@ -1,57 +1,127 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Star, ThumbsUp, MessageSquare, Filter, Search, Calendar, MoreVertical } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import AddReviewModal from './AddReviewModal'
 
 function RatingsReviews() {
   const [filter, setFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [selectedFreelancer, setSelectedFreelancer] = useState<any>(null)
+  const [reviews, setReviews] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [freelancers, setFreelancers] = useState<{id: string, name: string}[]>([])
+  const [projects, setProjects] = useState<{id: string, title: string}[]>([])
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  const reviews = [
-    {
-      id: 1,
-      freelancer: {
-        name: 'Sarah Johnson',
-        image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        title: 'Senior Full Stack Developer'
-      },
-      project: 'E-commerce Website Development',
-      rating: 5,
-      review: 'Sarah exceeded all expectations. Her technical expertise and communication skills were outstanding. She delivered the project ahead of schedule and implemented additional features that greatly enhanced the functionality.',
-      date: '2024-03-15',
-      metrics: {
-        communication: 5,
-        quality: 5,
-        expertise: 5,
-        deadlines: 5,
-        collaboration: 5
-      },
-      helpful: 12,
-      replies: 3
-    },
-    {
-      id: 2,
-      freelancer: {
-        name: 'Michael Chen',
-        image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        title: 'UI/UX Designer'
-      },
-      project: 'Mobile App Design',
-      rating: 4,
-      review: 'Michael brought creative solutions to our design challenges. His attention to detail and user-centric approach resulted in a highly intuitive interface. Would definitely work with him again.',
-      date: '2024-03-10',
-      metrics: {
-        communication: 4,
-        quality: 5,
-        expertise: 4,
-        deadlines: 4,
-        collaboration: 5
-      },
-      helpful: 8,
-      replies: 2
+  useEffect(() => {
+    fetchReviews()
+    fetchFreelancers()
+    fetchProjects()
+  }, [])
+
+  const fetchFreelancers = async () => {
+    const { data, error } = await supabase
+      .from('freelancer_profiles')
+      .select('id, full_name')
+      .order('created_at', { ascending: false })
+    if (!error && data) {
+      setFreelancers(data.map((f: any) => ({ id: f.id, name: f.full_name })))
+    } else {
+      setFreelancers([])
     }
-  ]
+  }
+
+  const fetchProjects = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return setProjects([])
+    const { data: clientProfile } = await supabase
+      .from('client_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single()
+    if (!clientProfile) return setProjects([])
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, title')
+      .eq('client_id', clientProfile.id)
+      .order('created_at', { ascending: false })
+    if (!error && data) {
+      setProjects(data.map((p: any) => ({ id: p.id, title: p.title })))
+    } else {
+      setProjects([])
+    }
+  }
+
+  const fetchReviews = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { data: clientProfile } = await supabase
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!clientProfile) throw new Error('Client profile not found')
+
+      // DEBUG: Try a simple query without relationships first
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews_freelancer')
+        .select('*')
+        .eq('client_id', clientProfile.id)
+        .order('created_at', { ascending: false });
+
+      if (reviewsError) {
+        console.error('Supabase reviews fetch error:', reviewsError);
+        throw reviewsError;
+      }
+
+      // Once this works, try the advanced query below:
+      // const { data: reviewsData, error: reviewsError } = await supabase
+      //   .from('reviews_freelancer')
+      //   .select(`
+      //     id,
+      //     created_at,
+      //     rating,
+      //     review_text,
+      //     would_rehire,
+      //     freelancer_id,
+      //     project_id,
+      //     freelancers:freelancer_profiles ( full_name, avatar_url, professional_title ),
+      //     projects:projects ( title )
+      //   `)
+      //   .eq('client_id', clientProfile.id)
+      //   .order('created_at', { ascending: false });
+      //
+      // if (reviewsError) {
+      //   console.error('Supabase reviews fetch error:', reviewsError);
+      //   throw reviewsError;
+      // }
+
+      const normalized = (reviewsData || []).map((r: any) => ({
+        ...r,
+        freelancer: {
+          name: r.freelancers?.full_name || '',
+          image: r.freelancers?.avatar_url || '',
+          title: r.freelancers?.professional_title || ''
+        },
+        project: r.projects?.title || '',
+        date: r.created_at,
+        would_rehire: r.would_rehire,
+      }))
+      setReviews(normalized)
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch reviews')
+      setReviews([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAddReview = async (reviewData: any) => {
     try {
@@ -66,25 +136,47 @@ function RatingsReviews() {
 
       if (!clientProfile) throw new Error('Client profile not found')
 
+      // Verify project_id exists in projects table before inserting
+      const { data: projectExists, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', reviewData.projectId)
+        .single();
+      if (projectError || !projectExists) {
+        setError('Selected project does not exist. Please choose a valid project.');
+        return;
+      }
+
       const { error } = await supabase
-        .from('freelancer_reviews')
+        .from('reviews_freelancer')
         .insert([
           {
+            // Required fields
             client_id: clientProfile.id,
             freelancer_id: reviewData.freelancerId,
+            job_id: reviewData.jobId || null, // if not provided, set to null
             project_id: reviewData.projectId,
+            duration: reviewData.duration || '',
+            value: reviewData.value || '',
+            completed: reviewData.completed || '',
+            skills_used: reviewData.skillsUsed || '',
+            created_at: new Date().toISOString(),
             rating: reviewData.rating,
-            review: reviewData.review,
-            metrics: reviewData.metrics
+            review_text: reviewData.review,
+            would_rehire: Boolean(reviewData.wouldRehire)
           }
         ])
 
       if (error) throw error
 
       // Refresh reviews list
-      // You would typically fetch the updated reviews here
-    } catch (error) {
-      console.error('Error adding review:', error)
+      await fetchReviews()
+      setShowReviewModal(false)
+      setSuccessMsg('Review submitted successfully!')
+      setTimeout(() => setSuccessMsg(null), 3000)
+    } catch (error: any) {
+      setError(error.message || 'Failed to submit review.')
+      setShowReviewModal(false)
     }
   }
 
@@ -94,6 +186,12 @@ function RatingsReviews() {
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">Ratings & Reviews</h2>
         <div className="flex items-center space-x-4">
+          <button
+            className="px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] font-medium shadow transition-all"
+            onClick={() => setShowReviewModal(true)}
+          >
+            Add Review
+          </button>
           <div className="relative">
             <input
               type="text"
@@ -104,7 +202,6 @@ function RatingsReviews() {
             />
             <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
           </div>
-          
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -117,6 +214,13 @@ function RatingsReviews() {
           </select>
         </div>
       </div>
+
+      {/* Success Message */}
+      {successMsg && (
+        <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-2 rounded mb-4">
+          {successMsg}
+        </div>
+      )}
 
       {/* Reviews List */}
       <div className="space-y-6">
@@ -148,10 +252,13 @@ function RatingsReviews() {
               </div>
             </div>
 
-            {/* Project Name */}
+            {/* Project and Freelancer Name */}
             <div className="mt-4">
               <span className="text-sm font-medium text-gray-600">Project:</span>
               <span className="ml-2 text-sm text-gray-900">{review.project}</span>
+              <span className="mx-2 text-gray-400">|</span>
+              <span className="text-sm font-medium text-gray-600">Freelancer:</span>
+              <span className="ml-2 text-sm text-gray-900">{review.freelancer.name}</span>
             </div>
 
             {/* Rating */}
@@ -169,35 +276,16 @@ function RatingsReviews() {
             </div>
 
             {/* Review Text */}
-            <p className="mt-4 text-gray-700">{review.review}</p>
+            <p className="mt-4 text-gray-700">{review.review_text}</p>
 
-            {/* Performance Metrics */}
-            <div className="mt-6 grid grid-cols-5 gap-4">
-              {Object.entries(review.metrics).map(([key, value]) => (
-                <div key={key} className="text-center">
-                  <div className="text-sm font-medium text-gray-900 mb-1">
-                    {key.charAt(0).toUpperCase() + key.slice(1)}
-                  </div>
-                  <div className="flex items-center justify-center">
-                    <Star size={16} className="text-yellow-400 fill-current" />
-                    <span className="ml-1 text-sm text-gray-600">{value}.0</span>
-                  </div>
-                </div>
-              ))}
+            {/* Would Rehire */}
+            <div className="mt-4">
+              <span className="text-sm font-medium text-gray-600">Would Rehire:</span>
+              <span className="ml-2 text-sm font-semibold text-gray-900">{review.would_rehire ? 'Yes' : 'No'}</span>
             </div>
 
             {/* Actions */}
-            <div className="mt-6 flex items-center justify-between border-t pt-4">
-              <div className="flex items-center space-x-4">
-                <button className="flex items-center text-gray-600 hover:text-gray-900">
-                  <ThumbsUp size={16} className="mr-1" />
-                  <span className="text-sm">Helpful ({review.helpful})</span>
-                </button>
-                <button className="flex items-center text-gray-600 hover:text-gray-900">
-                  <MessageSquare size={16} className="mr-1" />
-                  <span className="text-sm">Reply ({review.replies})</span>
-                </button>
-              </div>
+            <div className="mt-6 flex items-center justify-end border-t pt-4">
               <button className="text-[#00704A] hover:text-[#005538] text-sm font-medium">
                 View Full Review
               </button>
@@ -205,6 +293,15 @@ function RatingsReviews() {
           </div>
         ))}
       </div>
+
+      {/* Add Review Modal */}
+      <AddReviewModal
+        open={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        onSubmit={handleAddReview}
+        freelancers={freelancers}
+        projects={projects}
+      />
     </div>
   )
 }

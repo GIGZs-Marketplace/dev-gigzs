@@ -124,7 +124,7 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
 
   return (
     <div className="bg-white p-8 rounded-lg shadow-lg max-w-[800px] w-full">
-      <h2 className="text-2xl font-bold text-center mb-8 text-[#00704A]">Welcome Back</h2>
+      <h2 className="text-2xl font-bold text-center mb-8 text-primary">Welcome Back</h2>
 
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start text-red-700">
@@ -150,12 +150,12 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
           onClick={() => setAccountType('freelancer')}
           className={`flex-1 p-6 rounded-lg border-2 transition-all ${
             accountType === 'freelancer'
-              ? 'border-[#00704A] bg-[#00704A]/5'
-              : 'border-gray-200 hover:border-[#00704A]/50'
+              ? 'border-primary bg-primary/5'
+              : 'border-gray-200 hover:border-primary/50'
           }`}
         >
           <div className="flex justify-center mb-4">
-            <Briefcase size={32} className={accountType === 'freelancer' ? 'text-[#00704A]' : 'text-gray-400'} />
+            <Briefcase size={32} className={accountType === 'freelancer' ? 'text-primary' : 'text-gray-400'} />
           </div>
           <h3 className="text-lg font-semibold text-center">Freelancer</h3>
         </button>
@@ -164,12 +164,12 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
           onClick={() => setAccountType('client')}
           className={`flex-1 p-6 rounded-lg border-2 transition-all ${
             accountType === 'client'
-              ? 'border-[#00704A] bg-[#00704A]/5'
-              : 'border-gray-200 hover:border-[#00704A]/50'
+              ? 'border-primary bg-primary/5'
+              : 'border-gray-200 hover:border-primary/50'
           }`}
         >
           <div className="flex justify-center mb-4">
-            <User size={32} className={accountType === 'client' ? 'text-[#00704A]' : 'text-gray-400'} />
+            <User size={32} className={accountType === 'client' ? 'text-primary' : 'text-gray-400'} />
           </div>
           <h3 className="text-lg font-semibold text-center">Client</h3>
         </button>
@@ -186,7 +186,7 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
                 setEmail(e.target.value)
                 if (error) setError(null)
               }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
               placeholder="Enter your email"
               required
             />
@@ -204,7 +204,7 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
                 setPassword(e.target.value)
                 if (error) setError(null)
               }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#00704A]"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
               placeholder="Enter your password (min. 6 characters)"
               required
               minLength={6}
@@ -215,16 +215,16 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
 
         <div className="flex items-center justify-between">
           <label className="flex items-center">
-            <input type="checkbox" className="rounded border-gray-300 text-[#00704A] focus:ring-[#00704A]" />
+            <input type="checkbox" className="rounded border-gray-300 text-primary focus:ring-[#00704A]" />
             <span className="ml-2 text-sm text-gray-600">Remember me</span>
           </label>
-          <a href="#" className="text-sm text-[#00704A] hover:underline">Forgot password?</a>
+          <a href="#" className="text-sm text-primary hover:underline">Forgot password?</a>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-[#00704A] text-white py-2 rounded-lg hover:bg-[#005538] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-primary text-white py-2 rounded-lg hover:bg-[#005538] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
@@ -232,7 +232,7 @@ function Login({ onSwitch, onSuccess }: LoginProps) {
 
       <p className="mt-6 text-center text-sm text-gray-600">
         Don't have an account?{' '}
-        <button onClick={onSwitch} className="text-[#00704A] hover:underline">
+        <button onClick={onSwitch} className="text-primary hover:underline">
           Sign up
         </button>
       </p>
