@@ -134,7 +134,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Check onboarding completion for freelancer
+    // Check onboarding completion for freelancer and client
     const checkOnboarding = async () => {
       setOnboardingStatus('loading');
       const { data: { user } } = await supabase.auth.getUser();
@@ -142,26 +142,46 @@ function App() {
         setOnboardingStatus('incomplete');
         return;
       }
-      // 1. Check profile
-      const { data: profile } = await supabase
-        .from('freelancer_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-      const profileComplete = profile && profile.professional_title && profile.hourly_rate && profile.skills && profile.skills.length > 0;
-      // 2. Check documents
-      const { data: docs } = await supabase
-        .from('documents')
-        .select('id')
-        .eq('user_id', user.id);
-      const docsUploaded = docs && docs.length > 0;
-      if (profileComplete && docsUploaded) {
-        setOnboardingStatus('complete');
-      } else {
-        setOnboardingStatus('incomplete');
+      
+      if (userType === 'freelancer') {
+        // 1. Check freelancer profile
+        const { data: profile } = await supabase
+          .from('freelancer_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        const profileComplete = profile && profile.professional_title && profile.hourly_rate && profile.skills && profile.skills.length > 0;
+        
+        // 2. Check documents
+        const { data: docs } = await supabase
+          .from('documents')
+          .select('id')
+          .eq('user_id', user.id);
+        const docsUploaded = docs && docs.length > 0;
+        
+        if (profileComplete && docsUploaded) {
+          setOnboardingStatus('complete');
+        } else {
+          setOnboardingStatus('incomplete');
+        }
+      } else if (userType === 'client') {
+        // Check client profile and verification status
+        const { data: profile } = await supabase
+          .from('client_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+          
+        // Check if profile exists and is verified
+        if (profile && profile.verification_status === 'approved') {
+          setOnboardingStatus('complete');
+        } else {
+          setOnboardingStatus('incomplete');
+        }
       }
     };
-    if (isAuthenticated && userType === 'freelancer') {
+    
+    if (isAuthenticated) {
       checkOnboarding();
     }
   }, [isAuthenticated, userType]);
@@ -224,11 +244,15 @@ function App() {
         schema: 'public',
         table: 'freelancer_profiles',
       }, (payload) => {
-        if (userType === 'freelancer' && payload.new.avatar_url) {
-          setProfileImageUrl(payload.new.avatar_url);
-        }
-        if (userType === 'freelancer' && payload.new.full_name) {
-          setFreelancerName(payload.new.full_name);
+        console.log('Freelancer profile updated:', payload.new);
+        if (userType === 'freelancer') {
+          if (payload.new.avatar_url) {
+            console.log('Updating profile image URL:', payload.new.avatar_url);
+            setProfileImageUrl(payload.new.avatar_url);
+          }
+          if (payload.new.full_name) {
+            setFreelancerName(payload.new.full_name);
+          }
         }
       })
       .subscribe();
@@ -240,11 +264,15 @@ function App() {
         schema: 'public',
         table: 'client_profiles',
       }, (payload) => {
-        if (userType === 'client' && payload.new.avatar_url) {
-          setProfileImageUrl(payload.new.avatar_url);
-        }
-        if (userType === 'client' && (payload.new.company_name || payload.new.full_name)) {
-          setFreelancerName(payload.new.company_name || payload.new.full_name);
+        console.log('Client profile updated:', payload.new);
+        if (userType === 'client') {
+          if (payload.new.avatar_url) {
+            console.log('Updating profile image URL:', payload.new.avatar_url);
+            setProfileImageUrl(payload.new.avatar_url);
+          }
+          if (payload.new.company_name || payload.new.full_name) {
+            setFreelancerName(payload.new.company_name || payload.new.full_name);
+          }
         }
       })
       .subscribe();
@@ -383,9 +411,14 @@ function App() {
     )
   }
 
-  // Only for freelancers: block dashboard until onboarding complete
+  // Block dashboard until onboarding complete for both freelancers and clients
   if (userType === 'freelancer' && onboardingStatus !== 'complete') {
     return <FreelancerOnboarding onComplete={() => setOnboardingStatus('complete')} />;
+  }
+  
+  // For clients: block dashboard until onboarding complete
+  if (userType === 'client' && onboardingStatus !== 'complete') {
+    return <ClientOnboarding onComplete={() => setOnboardingStatus('complete')} />;
   }
 
   const freelancerMenuSections = [
@@ -517,20 +550,20 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--secondary-bg)', color: 'var(--primary-text)' }}>
       {/* Sidebar */}
       <aside 
-        className={`bg-[#00704A] text-white fixed left-0 top-0 h-screen transition-all duration-300 ${
+        className={`bg-primary text-white fixed left-0 top-0 h-screen transition-all duration-300 ${
           isSidebarOpen ? 'w-64' : 'w-20'
         }`}
       >
-        <div className="h-16 px-4 flex items-center justify-between border-b border-[#005538]">
+        <div className="h-16 px-4 flex items-center justify-between border-b border-primary">
           <h1 className={`font-sans font-bold ${isSidebarOpen ? 'block' : 'hidden'}`}>
             {userType === 'freelancer' ? 'Freelancer Hub' : 'Client Hub'}
           </h1>
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-[#005538] rounded-lg"
+            className="p-2 hover:bg-primary rounded-lg"
           >
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -598,10 +631,10 @@ function App() {
         }`}
       >
         {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 fixed top-0 right-0 left-0 z-10" style={{ left: isSidebarOpen ? '16rem' : '5rem' }}>
+        <header className="h-16 fixed top-0 right-0 left-0 z-10 border-b" style={{ left: isSidebarOpen ? '16rem' : '5rem', background: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
           <div className="h-full px-6 flex items-center justify-between">
             <div className="flex items-center flex-1">
-              <h2 className="text-xl font-semibold text-gray-800">
+              <h2 className="text-xl font-semibold" style={{ color: 'var(--heading-text)' }}>
                 {userType === 'freelancer' ? 'Freelancer Dashboard' : 'Client Dashboard'}
               </h2>
             </div>
@@ -622,10 +655,10 @@ function App() {
                   <ChevronDown size={16} />
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20">
-                    <a href="#" onClick={() => setActiveSection('profile')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
-                    <a href="#" onClick={() => setActiveSection('settings')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
-                    <a href="#" onClick={() => setActiveSection('logout')} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 z-20" style={{ background: 'var(--card-bg)' }}>
+                    <a href="#" onClick={() => setActiveSection('profile')} className="block px-4 py-2 text-sm hover:bg-hover" style={{ color: 'var(--primary-text)' }}>Profile</a>
+                    <a href="#" onClick={() => setActiveSection('settings')} className="block px-4 py-2 text-sm hover:bg-hover" style={{ color: 'var(--primary-text)' }}>Settings</a>
+                    <a href="#" onClick={() => setActiveSection('logout')} className="block px-4 py-2 text-sm hover:bg-hover" style={{ color: 'var(--primary-text)' }}>Logout</a>
                   </div>
                 )}
               </div>
@@ -642,15 +675,16 @@ function App() {
       {/* Delete Account Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Delete Account</h3>
-            <p className="text-gray-600 mb-6">
+          <div className="rounded-lg p-6 max-w-md w-full mx-4" style={{ background: 'var(--card-bg)' }}>
+            <h3 className="text-xl font-semibold mb-4" style={{ color: 'var(--heading-text)' }}>Delete Account</h3>
+            <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
               Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.
             </p>
             <div className="flex justify-end space-x-4">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-hover"
+                style={{ borderColor: 'var(--border-color)', color: 'var(--primary-text)' }}
               >
                 Cancel
               </button>
@@ -684,10 +718,10 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors ${
+      className={`w-full flex items-center px-3 py-2 rounded-lg transition-all duration-200 ease-in-out cursor-pointer ${
         isActive
-          ? 'bg-[#005538] text-white'
-          : 'text-gray-100 hover:bg-[#005538]'
+          ? 'bg-primary text-white scale-105 shadow-md'
+          : 'text-gray-100 hover:bg-primary hover:text-white hover:scale-105 hover:shadow-lg'
       }`}
     >
       <span className="min-w-[2rem]">{icon}</span>

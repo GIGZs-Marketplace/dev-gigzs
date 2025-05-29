@@ -31,9 +31,27 @@ const SignatureModal: React.FC<SignatureModalProps> = ({ isOpen, onClose, onSign
 
   const handleSign = () => {
     if (signatureRef.current) {
-      const dataUrl = signatureRef.current.toDataURL();
-      setSignatureData(dataUrl);
-      onSign(dataUrl);
+      if (signatureRef.current.isEmpty()) {
+        alert('Please provide a signature before signing');
+        return;
+      }
+      
+      // Use JPEG format with lower quality to reduce size
+      const dataUrl = signatureRef.current.toDataURL('image/jpeg', 0.5);
+      
+      // Check if the data URL is too large (over 100KB)
+      if (dataUrl.length > 100000) {
+        console.log('Signature data too large, reducing quality further');
+        // Reduce quality even more if it's too large
+        const reducedDataUrl = signatureRef.current.toDataURL('image/jpeg', 0.3);
+        console.log('Reduced signature data length:', reducedDataUrl.length);
+        setSignatureData(reducedDataUrl);
+        onSign(reducedDataUrl);
+      } else {
+        console.log('Signature data length:', dataUrl.length);
+        setSignatureData(dataUrl);
+        onSign(dataUrl);
+      }
     }
   };
 

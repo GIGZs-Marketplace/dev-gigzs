@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
 import { Mail, Lock, Briefcase, User, AlertCircle } from 'lucide-react'
-import { supabase, UserType } from '../lib/supabase'
+import { supabase } from '../lib/supabase';
+
+// Define UserType, as it's specific to component logic or should come from a types file
+export type UserType = 'freelancer' | 'client';
 
 interface LoginProps {
   onSwitch: () => void

@@ -60,7 +60,8 @@ function Contracts() {
   const [signingContractId, setSigningContractId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [uploadingContractId, setUploadingContractId] = useState<string | null>(null)
-  const [progressUpdating, setProgressUpdating] = useState<string | null>(null)
+  const [progressUpdating, setProgressUpdating] = useState<string | null>(null);
+  const [signatureLoading, setSignatureLoading] = useState(false);
 
   useEffect(() => {
     const fetchContracts = async () => {
@@ -82,7 +83,7 @@ function Contracts() {
           .from('contracts')
           .select(`
             *,
-            job:job_id (
+            job:jobs (
               *,
               duration
             )
@@ -155,7 +156,7 @@ function Contracts() {
             ...c,
             startDate: calculatedStartDate?.toISOString().split('T')[0], // Format as YYYY-MM-DD
             endDate: calculatedEndDate?.toISOString().split('T')[0], // Format as YYYY-MM-DD
-            value: c.amount,
+            value: typeof c.amount === 'number' ? c.amount : 0,
             freelancer_signed: c.freelancer_signed ?? false,
             status: c.status || 'ongoing',
             paymentStatus: c.payment_status || 'pending'
@@ -170,7 +171,151 @@ function Contracts() {
       }
     }
     fetchContracts()
-  }, [])
+  }, []);
+
+  // Test function to directly save to contracts table
+  const testDatabaseSave = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('TEST: No user logged in');
+        return;
+      }
+      
+      const { data: freelancerProfile } = await supabase
+        .from('freelancer_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+        
+      if (!freelancerProfile) {
+        console.log('TEST: No freelancer profile found');
+        return;
+      }
+      
+      // Get the first contract for testing
+      const { data: contracts } = await supabase
+        .from('contracts')
+        .select('id')
+        .eq('freelancer_id', freelancerProfile.id)
+        .limit(1);
+        
+      if (!contracts || contracts.length === 0) {
+        console.log('TEST: No contracts found for testing');
+        return;
+      }
+      
+      const testContractId = contracts[0].id;
+      console.log('TEST: Will update contract ID:', testContractId);
+      
+      // Test a simple update with just a boolean field
+      const { error: testUpdateError } = await supabase
+        .from('contracts')
+        .update({ freelancer_signed: true })
+        .eq('id', testContractId);
+        
+      if (testUpdateError) {
+        console.error('TEST: Update error:', testUpdateError);
+      } else {
+        console.log('TEST: Successfully updated freelancer_signed to true');
+        
+        // Now test with a small text field
+        const { error: testTextError } = await supabase
+          .from('contracts')
+          .update({ status: 'test_status_freelancer' })
+          .eq('id', testContractId);
+          
+        if (testTextError) {
+          console.error('TEST: Text update error:', testTextError);
+        } else {
+          console.log('TEST: Successfully updated status field');
+        }
+      }
+    } catch (err) {
+      console.error('TEST: Exception during test:', err);
+    }
+  };
+  
+  
+
+  const handleSaveFreelancerSignature = async (signatureData: string) => {
+    console.log('[DEBUG] handleSaveFreelancerSignature called.');
+    if (!signingContractId) {
+      console.error('[DEBUG] signingContractId is null or undefined. Cannot save signature.');
+      return;
+    }
+    console.log('[DEBUG] signingContractId:', signingContractId);
+    setSignatureLoading(true);
+    console.log('[DEBUG] Attempting to update contract in Supabase...');
+    try {
+      // First, check if the client has already signed
+      const { data: currentContract, error: fetchError } = await supabase
+        .from('contracts')
+        .select('client_signed, status')
+        .eq('id', signingContractId)
+        .single();
+
+      if (fetchError) {
+        console.error('[DEBUG] Error fetching contract:', fetchError);
+        throw fetchError;
+      }
+
+      // Determine the new status based on whether the client has signed
+      let newStatus = currentContract.status;
+      if (currentContract.client_signed) {
+        newStatus = 'active'; // Both parties have signed
+      } else {
+        newStatus = 'pending_client_signature'; // Waiting for client to sign
+      }
+
+      // Create a timestamp string instead of using the full signature data
+      const signatureTimestamp = new Date().toISOString();
+      
+      // Update all contract fields in one operation - only using columns that exist
+      const { error: updateError } = await supabase
+        .from('contracts')
+        .update({
+          freelancer_signed: true,
+          status: newStatus,
+          // Store a placeholder instead of the actual signature data
+          freelancer_signature: signatureData,
+          // Update the updated_at field if it exists
+          updated_at: signatureTimestamp
+        })
+        .eq('id', signingContractId);
+
+      if (updateError) {
+        console.error('[DEBUG] Update error:', updateError);
+        throw updateError;
+      }
+      
+      console.log('[DEBUG] Contract successfully updated with signature timestamp');
+      
+      console.log('[DEBUG] Supabase update successful.');
+
+      // Update local state with the correct new status
+      setContracts(prevContracts =>
+        prevContracts.map(c =>
+          c.id === signingContractId ? { 
+            ...c, 
+            freelancer_signed: true, 
+            freelancer_signature: signatureData,
+            status: newStatus,
+            updated_at: signatureTimestamp
+          } : c
+        )
+      );
+      setShowSignatureModal(false);
+      console.log('[DEBUG] Contract signed successfully, local state updated.');
+      alert('Contract signed successfully!'); // Simple alert for feedback
+    } catch (err) {
+      console.error('[DEBUG] Error in handleSaveFreelancerSignature catch block:', err);
+      alert('Failed to sign contract. Please try again.'); // Simple alert for error
+    } finally {
+      setSignatureLoading(false);
+      setSigningContractId(null);
+    }
+  };
 
   const getStatusColor = (status: ContractStatus) => {
     switch (status) {
@@ -404,7 +549,7 @@ function Contracts() {
                 <DollarSign className="text-gray-400" size={18} />
                 <div>
                   <p className="text-xs text-gray-500">Contract Value</p>
-                  <p className="text-sm font-medium">${contract.value.toLocaleString()}</p>
+                  <p className="text-sm font-medium">${(contract.value || 0).toLocaleString()}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -550,10 +695,10 @@ function Contracts() {
 
       {/* Signature Modal for Freelancer */}
       <SignatureModal
+        onSign={handleSaveFreelancerSignature}
         isOpen={showSignatureModal}
         onClose={() => setShowSignatureModal(false)}
-        onSign={signature => signingContractId && handleFreelancerSign(signingContractId, signature)}
-        loading={loading}
+        loading={signatureLoading}
       />
     </div>
   )

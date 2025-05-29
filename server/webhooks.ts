@@ -125,25 +125,8 @@ app.post<{}, any, PaymentRequest>('/api/payments', (async (req: Request<{}, any,
     }
 }) as express.RequestHandler);
 
-// Cashfree webhook secret
-const WEBHOOK_SECRET = process.env.CASHFREE_WEBHOOK_SECRET;
-
-if (!WEBHOOK_SECRET) {
-    throw new Error('Missing Cashfree webhook secret');
-}
-
-// Verify webhook signature
-function verifyWebhookSignature(payload: string, signature: string): boolean {
-    const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET as string);
-    const calculatedSignature = hmac.update(payload).digest('hex');
-    return crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(calculatedSignature)
-    );
-}
-
 // Handle webhook
-app.post<{}, any, any>('/webhooks/cashfree', (async (req, res) => {
+app.post('/api/payments/webhook', async (req, res) => {
     try {
         const signature = req.headers['x-webhook-signature'];
         const payload = JSON.stringify(req.body);
@@ -153,30 +136,49 @@ app.post<{}, any, any>('/webhooks/cashfree', (async (req, res) => {
             return res.status(400).json({ error: 'Invalid signature' });
         }
 
-        if (!verifyWebhookSignature(payload, signature)) {
+        // Verify webhook signature
+        const webhookSecret = process.env.VITE_WEBHOOK_SECRET;
+        if (!webhookSecret) {
+            throw new Error('Missing webhook secret');
+        }
+
+        const hmac = crypto.createHmac('sha256', webhookSecret);
+        const calculatedSignature = hmac.update(payload).digest('hex');
+
+        if (!crypto.timingSafeEqual(
+            Buffer.from(signature),
+            Buffer.from(calculatedSignature)
+        )) {
             console.error('Invalid webhook signature');
             return res.status(400).json({ error: 'Invalid signature' });
         }
 
-        const { order_id, order_status } = req.body;
+        const { event_type, payment_link_id, link_status, link_meta } = req.body;
+        console.log('Received webhook event:', event_type);
 
-        // Update payment status in database
+        // Handle different event types
+        switch (event_type) {
+            case 'payment_link.paid':
+                if (link_meta?.order_id) {
+                    // Update payment status
         const { error: updateError } = await supabase
             .from('payments')
-            .update({ status: order_status })
-            .eq('order_id', order_id);
+                        .update({ 
+                            status: 'paid',
+                            payment_link_id: payment_link_id
+                        })
+                        .eq('id', link_meta.order_id);
 
         if (updateError) {
             console.error('Error updating payment status:', updateError);
             return res.status(500).json({ error: 'Failed to update payment status' });
         }
 
-        // If payment is successful, create wallet entry
-        if (order_status === 'PAID') {
+                    // Create wallet entry
             const { data: payment, error: paymentError } = await supabase
                 .from('payments')
-                .select('project_id, amount, freelancer_id')
-                .eq('order_id', order_id)
+                        .select('contract_id, amount, freelancer_id')
+                        .eq('id', link_meta.order_id)
                 .single();
 
             if (paymentError || !payment) {
@@ -189,8 +191,8 @@ app.post<{}, any, any>('/webhooks/cashfree', (async (req, res) => {
                 .insert({
                     freelancer_id: payment.freelancer_id,
                     amount: payment.amount,
-                    project_id: payment.project_id,
-                    payment_id: order_id,
+                            contract_id: payment.contract_id,
+                            payment_id: payment_link_id,
                     type: 'CREDIT'
                 });
 
@@ -198,14 +200,35 @@ app.post<{}, any, any>('/webhooks/cashfree', (async (req, res) => {
                 console.error('Error creating wallet entry:', walletError);
                 return res.status(500).json({ error: 'Failed to create wallet entry' });
             }
+                }
+                break;
+
+            case 'payment_link.expired':
+                if (link_meta?.order_id) {
+                    await supabase
+                        .from('payments')
+                        .update({ status: 'expired' })
+                        .eq('id', link_meta.order_id);
+                }
+                break;
+
+            case 'payment_link.cancelled':
+                if (link_meta?.order_id) {
+                    await supabase
+                        .from('payments')
+                        .update({ status: 'cancelled' })
+                        .eq('id', link_meta.order_id);
+                }
+                break;
         }
 
         // Log webhook event
         const { error: logError } = await supabase
             .from('payment_webhooks')
             .insert({
-                order_id,
-                status: order_status,
+                payment_link_id,
+                event_type,
+                status: link_status,
                 payload: req.body
             });
 
@@ -218,7 +241,7 @@ app.post<{}, any, any>('/webhooks/cashfree', (async (req, res) => {
         console.error('Webhook processing error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-}) as express.RequestHandler);
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

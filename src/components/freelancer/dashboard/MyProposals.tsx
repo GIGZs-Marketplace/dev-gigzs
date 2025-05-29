@@ -68,6 +68,7 @@ function MyProposals({ sectionState }: MyProposalsProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const navigate = useNavigate()
   
+  
   // Handle view details click
   const handleViewDetails = async (jobId: string) => {
     try {
@@ -104,21 +105,35 @@ function MyProposals({ sectionState }: MyProposalsProps) {
   // Open modal and prefill job if jobId is passed in sectionState
   // This should only run once when the component mounts with a valid sectionState
   useEffect(() => {
-    // Only open the modal if this is a fresh navigation with a jobId
-    if (sectionState && sectionState.jobId && sectionState.openModal === true) {
-      setIsModalOpen(true);
-      setNewProposal((prev) => ({ ...prev, job_id: sectionState.jobId }));
-      
-      // Clear the openModal flag to prevent reopening on subsequent renders
-      if (sectionState.openModal) {
-        sectionState.openModal = false;
+    const SESSION_STORAGE_KEY = 'lastConsumedProposalTriggerId';
+    const triggerIdFromState = sectionState?.triggerId;
+    const jobIdFromState = sectionState?.jobId;
+    const openModalSignal = sectionState?.openModal === true;
+
+    if (openModalSignal && jobIdFromState && triggerIdFromState) {
+      const lastConsumedTriggerId = sessionStorage.getItem(SESSION_STORAGE_KEY);
+
+      if (triggerIdFromState !== lastConsumedTriggerId) {
+        setIsModalOpen(true);
+        setNewProposal((prev) => ({ ...prev, job_id: jobIdFromState }));
+        sessionStorage.setItem(SESSION_STORAGE_KEY, triggerIdFromState);
+      } else {
+        // This trigger has been consumed. If modal is somehow open, ensure it's closed unless user opened it manually.
+        // For now, we assume if trigger is consumed, and modal is open, it's from a previous valid opening of this trigger.
+        // If user closes it, isModalOpen becomes false, and this useEffect won't reopen for the same consumed trigger.
       }
     } else {
-      // Always ensure modal is closed when component mounts without explicit open request
-      setIsModalOpen(false);
+      // If the openModal signal is not active, or essential data is missing,
+      // and the modal is open, close it.
+      if (isModalOpen) {
+        setIsModalOpen(false);
+      }
+      // No need to clear sessionStorage here as a new triggerId will naturally supersede the old one.
+      // Or, if no trigger is active, the check `triggerIdFromState !== lastConsumedTriggerId` handles it.
     }
-    // eslint-disable-next-line
-  }, []);  // Empty dependency array means this only runs once on mount
+    // Adding `isModalOpen` to dependencies to handle cases where modal might be closed by other means
+    // and we need to re-evaluate if a persistent trigger in sectionState should reopen it (if not consumed).
+  }, [sectionState, isModalOpen]);  // Empty dependency array means this only runs once on mount
 
   const checkAuth = async () => {
     try {

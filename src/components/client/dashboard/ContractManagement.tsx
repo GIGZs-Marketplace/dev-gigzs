@@ -25,15 +25,13 @@ function ContractManagement() {
             projects (
               id,
               title,
-              budget_amount,
-              budget_max_amount,
-              budget_currency,
-              budget_type
+              budget
             ),
             client_profiles:client_id (company_name),
             freelancer_profiles:freelancer_id (full_name)
           `)
-          .filter('status', 'eq', 'signed')
+          .eq('client_signed', true)
+          .eq('freelancer_signed', true)
           .order('created_at', { ascending: false })
         );
         if (error) {
@@ -42,7 +40,8 @@ function ContractManagement() {
           const fallback = await supabase
             .from('contracts')
             .select('*')
-            .eq('status', 'signed')
+            .eq('client_signed', true)
+            .eq('freelancer_signed', true)
             .order('created_at', { ascending: false });
           contractsData = fallback.data;
           error = fallback.error;
@@ -54,12 +53,12 @@ function ContractManagement() {
         const formattedContracts = (contractsData ?? []).map(contract => ({
           ...contract,
           title: contract.projects?.title || contract.title || 'Untitled Contract',
-          value: contract.projects?.budget_amount || contract.value || 0,
+          value: contract.projects?.budget || contract.amount || 0,
           budgetDetails: {
-            amount: contract.projects?.budget_amount ?? contract.value ?? 0,
-            maxAmount: contract.projects?.budget_max_amount ?? contract.value ?? 0,
+            amount: contract.projects?.budget ?? contract.amount ?? 0,
+            maxAmount: contract.projects?.budget ?? contract.amount ?? 0, // Using project.budget or contract.amount as max
             currency: '₹', // Always use Indian Rupees
-            type: contract.projects?.budget_type ?? 'fixed',
+            type: 'fixed', // Defaulting to 'fixed' as project.budget_type is not available
           },
           clientCompany: contract.client_profiles?.company_name ?? '',
           clientAvatar: contract.client_profiles?.avatar_url ?? '/default-avatar.png',

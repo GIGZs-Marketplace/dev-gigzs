@@ -4,16 +4,44 @@ import React, { useState, useEffect, useRef } from 'react'
 const setCSSVariables = (theme: string, color: string, fontSize: string) => {
   const root = document.documentElement;
   if (theme === 'dark') {
-    root.style.setProperty('--primary-color', '#272727'); // dark bg
-    root.style.setProperty('--primary-text', '#fff');
-    root.style.setProperty('--secondary-bg', '#272727');
-    root.style.setProperty('--accent-color', '#fff');
+    // Dark mode settings - ALL text should be white except badges and buttons
+    root.style.setProperty('--primary-color', color); // Use the selected color for primary elements
+    root.style.setProperty('--primary-text', '#ffffff'); // All text white
+    root.style.setProperty('--secondary-bg', '#1e1e1e'); // Darker background
+    root.style.setProperty('--tertiary-bg', '#121212'); // Even darker background
+    root.style.setProperty('--accent-color', color); // Use selected color for accents
+    root.style.setProperty('--card-bg', '#2d2d2d'); // Dark card background
+    root.style.setProperty('--border-color', '#444444'); // Dark borders
+    root.style.setProperty('--hover-color', '#3a3a3a'); // Dark hover state
+    root.style.setProperty('--text-secondary', '#ffffff'); // Secondary text also white
+    root.style.setProperty('--text-muted', '#cccccc'); // Only muted text slightly dimmed
+    root.style.setProperty('--button-text', '#ffffff'); // Button text white
+    root.style.setProperty('--heading-text', '#ffffff'); // Heading text white
+    root.style.setProperty('--link-text', color); // Links use the accent color
+    // Add dark mode class to body for additional styling hooks
+    document.body.classList.add('dark-mode');
+    document.body.classList.remove('light-mode');
   } else {
-    root.style.setProperty('--primary-color', color);
-    root.style.setProperty('--primary-text', '#111827');
-    root.style.setProperty('--secondary-bg', '#fff');
-    root.style.setProperty('--accent-color', color);
+    // Light mode settings
+    root.style.setProperty('--primary-color', color); // Use selected color for primary elements
+    root.style.setProperty('--primary-text', '#111827'); // Dark text for light mode
+    root.style.setProperty('--secondary-bg', '#ffffff'); // Light background
+    root.style.setProperty('--tertiary-bg', '#f9fafb'); // Slightly darker background
+    root.style.setProperty('--accent-color', color); // Use selected color for accents
+    root.style.setProperty('--card-bg', '#ffffff'); // White card background
+    root.style.setProperty('--border-color', '#e5e7eb'); // Light borders
+    root.style.setProperty('--hover-color', '#f3f4f6'); // Light hover state
+    root.style.setProperty('--text-secondary', '#6b7280'); // Secondary text gray
+    root.style.setProperty('--text-muted', '#9ca3af'); // Muted text lighter gray
+    root.style.setProperty('--button-text', '#ffffff'); // Button text white
+    root.style.setProperty('--heading-text', '#111827'); // Heading text dark
+    root.style.setProperty('--link-text', color); // Links use the accent color
+    // Add light mode class to body for additional styling hooks
+    document.body.classList.add('light-mode');
+    document.body.classList.remove('dark-mode');
   }
+  
+  // Set font size
   let fs = '16px';
   if (fontSize === 'small') fs = '14px';
   if (fontSize === 'large') fs = '18px';
@@ -44,12 +72,8 @@ function SettingsPage() {
   const handleThemeChange = (selectedTheme: string) => {
     setTheme(selectedTheme);
     localStorage.setItem('theme', selectedTheme);
-    // If switching to dark, don't allow color scheme
-    if (selectedTheme === 'dark') {
-      setCSSVariables('dark', colorScheme, fontSize);
-    } else {
-      setCSSVariables(selectedTheme, colorScheme, fontSize);
-    }
+    // Apply the current color scheme regardless of theme
+    setCSSVariables(selectedTheme, colorScheme, fontSize);
   };
 
   const handleColorSchemeChange = (color: string) => {
@@ -169,6 +193,8 @@ function SettingsPage() {
 
   const handleBitmojiSelect = async (bitmojiUrl: string) => {
     try {
+      setProfileLoading(true);
+      setProfileError('');
       setSelectedBitmoji(bitmojiUrl);
       setProfilePic(bitmojiUrl);
       setShowBitmojiModal(false);
@@ -176,10 +202,12 @@ function SettingsPage() {
       // Update the profile picture in the database
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setProfileError('User not authenticated');
-        return;
+        throw new Error('User not authenticated');
       }
 
+      console.log('Updating profile with bitmoji URL:', bitmojiUrl);
+
+      // Update both profiles to ensure the avatar is updated everywhere
       // First try to update freelancer profile
       const { error: freelancerError } = await supabase
         .from('freelancer_profiles')
@@ -189,12 +217,13 @@ function SettingsPage() {
         })
         .eq('user_id', user.id);
 
-      if (!freelancerError) {
-        setProfileSuccess('Profile picture updated successfully!');
-        return;
+      if (freelancerError) {
+        console.log('No freelancer profile found or error updating:', freelancerError);
+      } else {
+        console.log('Freelancer profile updated with new avatar');
       }
 
-      // If freelancer update fails, try to update client profile
+      // Also update client profile (regardless of freelancer update result)
       const { error: clientError } = await supabase
         .from('client_profiles')
         .update({ 
@@ -204,15 +233,23 @@ function SettingsPage() {
         .eq('user_id', user.id);
 
       if (clientError) {
-        console.error('Error updating client profile:', clientError);
-        throw clientError;
+        console.log('No client profile found or error updating:', clientError);
+      } else {
+        console.log('Client profile updated with new avatar');
+      }
+      
+      // If both updates failed, we have a problem
+      if (freelancerError && clientError) {
+        throw new Error('Failed to update profile with new avatar');
       }
       
       setProfileSuccess('Profile picture updated successfully!');
       
     } catch (error) {
       console.error('Error updating profile picture:', error);
-      setProfileError('Failed to update profile picture');
+      setProfileError('Failed to update profile picture: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setProfileLoading(false);
     }
   }
 
@@ -401,13 +438,23 @@ function SettingsPage() {
 
   const handleSaveCroppedImage = async () => {
     try {
+      setProfileLoading(true);
+      setProfileError('');
+      
       // Step 1: Fetch the cropped image from the URL
       const response = await fetch(croppedImageUrl);
       const blob = await response.blob();
       const fileExt = 'jpeg';
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = fileName;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
   
+      console.log('Uploading profile image:', filePath);
+      
       // Step 2: Upload the cropped image to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
@@ -415,7 +462,7 @@ function SettingsPage() {
   
       if (uploadError) {
         console.error('Error uploading file:', uploadError);
-        return;
+        throw new Error('Failed to upload image: ' + uploadError.message);
       }
   
       // Step 3: Get the public URL for the uploaded image
@@ -424,30 +471,20 @@ function SettingsPage() {
         .getPublicUrl(filePath);
   
       if (!publicUrlData) {
-        console.error('Public URL not found.');
-        return;
+        throw new Error('Public URL not found');
       }
   
-      const publicUrl = publicUrlData?.publicUrl;
+      const publicUrl = publicUrlData.publicUrl;
       if (!publicUrl) {
-        console.error('Public URL not found.');
-        return;
+        throw new Error('Public URL not found');
       }
+      
+      console.log('Profile image uploaded successfully:', publicUrl);
   
       // Step 4: Set the profile picture with the valid URL
       setProfilePic(publicUrl);
   
-      // Step 5: Fetch the current user and update their profile
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('Error fetching user:', userError);
-        return;
-      }
-  
-      const user = userData?.user;
-      if (!user) return;
-  
-      // Step 6: Update the user's profile with the new avatar URL
+      // Step 5: Update both profiles to ensure the avatar is updated everywhere
       // First try to update freelancer profile
       const { error: freelancerUpdateError } = await supabase
         .from('freelancer_profiles')
@@ -456,27 +493,42 @@ function SettingsPage() {
           updated_at: new Date().toISOString()
         })
         .eq('user_id', user.id);
-  
-      // If freelancer update fails or user is a client, update client profile
+      
       if (freelancerUpdateError) {
-        const { error: clientUpdateError } = await supabase
-          .from('client_profiles')
-          .update({ 
-            avatar_url: publicUrl,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', user.id);
-
-        if (clientUpdateError) {
-          console.error('Error updating client profile:', clientUpdateError);
-          throw clientUpdateError;
-        }
+        console.log('No freelancer profile found or error updating:', freelancerUpdateError);
+      } else {
+        console.log('Freelancer profile updated with new avatar');
       }
   
+      // Also update client profile (regardless of freelancer update result)
+      const { error: clientUpdateError } = await supabase
+        .from('client_profiles')
+        .update({ 
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+
+      if (clientUpdateError) {
+        console.log('No client profile found or error updating:', clientUpdateError);
+      } else {
+        console.log('Client profile updated with new avatar');
+      }
+      
+      // If both updates failed, we have a problem
+      if (freelancerUpdateError && clientUpdateError) {
+        throw new Error('Failed to update profile with new avatar');
+      }
+      
+      setProfileSuccess('Profile picture updated successfully!');
+      
       // Close the crop modal after saving the image
       setShowCropModal(false);
     } catch (error) {
-      console.error('Unexpected error:', error);
+      console.error('Error saving profile picture:', error);
+      setProfileError('Failed to update profile picture: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setProfileLoading(false);
     }
   };
   
@@ -791,14 +843,12 @@ function SettingsPage() {
               style={{ backgroundColor: color }}
               onClick={() => handleColorSchemeChange(color)}
               aria-label={`Switch to ${color} color scheme`}
-              disabled={theme === 'dark'}
-              title={theme === 'dark' ? 'Color scheme disabled in dark mode' : ''}
             />
           ))}
         </div>
-        {theme === 'dark' && (
-          <p className="text-xs text-gray-500 mt-1">Color schemes are disabled in dark mode.</p>
-        )}
+        <p className="text-xs text-gray-500 mt-1">
+          {theme === 'dark' ? 'In dark mode, accent colors will be applied to buttons and highlights.' : 'Choose your preferred color scheme for the entire application.'}
+        </p>
       </div>
       {/* Font Size Selection */}
       <div>

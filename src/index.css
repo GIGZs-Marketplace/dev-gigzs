@@ -7,26 +7,166 @@
 :root {
   --primary-color: #00704A;
   --primary-text: #111827;
-  --secondary-bg: #fff;
+  --secondary-bg: #ffffff;
+  --tertiary-bg: #f9fafb;
   --accent-color: #00704A;
+  --card-bg: #ffffff;
+  --border-color: #e5e7eb;
+  --hover-color: #f3f4f6;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --button-text: #ffffff;
+  --heading-text: #111827;
+  --link-text: #00704A;
   --base-font-size: 16px;
 }
+
 body {
   font-family: 'Inter', sans-serif;
   background: var(--secondary-bg);
   color: var(--primary-text);
   font-size: var(--base-font-size);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Apply theme to common elements */
 .button-primary, .bg-primary {
   background: var(--primary-color) !important;
-  color: #fff !important;
+  color: var(--button-text) !important;
 }
+
 .text-primary {
   color: var(--primary-color) !important;
 }
+
 .border-primary {
   border-color: var(--primary-color) !important;
+}
+
+/* Replace all instances of the default green color with the variable */
+.text-\[\#00704A\], .text-green-700, .text-green-600, .text-green-500 {
+  color: var(--primary-color) !important;
+}
+
+.bg-\[\#00704A\], .bg-green-700, .bg-green-600, .bg-green-500, .hover\:bg-\[\#00704A\]:hover {
+  background-color: var(--primary-color) !important;
+}
+
+.border-\[\#00704A\], .border-green-700, .border-green-600, .border-green-500 {
+  border-color: var(--primary-color) !important;
+}
+
+.hover\:bg-\[\#005538\]:hover {
+  background-color: var(--primary-color) !important;
+  filter: brightness(0.9) !important;
+}
+
+/* Card styling */
+.card, .bg-white, [class*='bg-white'] {
+  background-color: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Text colors */
+.text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900 {
+  color: var(--text-secondary) !important;
+}
+
+.text-black {
+  color: var(--primary-text) !important;
+}
+
+/* Heading colors */
+h1, h2, h3, h4, h5, h6, .text-xl, .text-2xl, .text-3xl, .text-4xl, .text-lg, .font-bold, .font-semibold, .font-medium {
+  color: var(--heading-text) !important;
+}
+
+/* Link colors */
+a, .text-blue-500, .text-blue-600, .text-blue-700 {
+  color: var(--link-text) !important;
+}
+
+/* Border colors */
+.border, .border-gray-200, .border-gray-300, .border-gray-100 {
+  border-color: var(--border-color) !important;
+}
+
+/* Input fields */
+input, select, textarea {
+  background-color: var(--card-bg) !important;
+  color: var(--primary-text) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Hover states */
+.hover\:bg-gray-50:hover, .hover\:bg-gray-100:hover {
+  background-color: var(--hover-color) !important;
+}
+
+/* Dark mode specific overrides - ALL TEXT WHITE except badges and buttons */
+.dark-mode {
+  color-scheme: dark;
+}
+
+.dark-mode * {
+  color: var(--primary-text) !important;
+}
+
+.dark-mode .bg-gray-50, 
+.dark-mode .bg-gray-100,
+.dark-mode .bg-gray-200 {
+  background-color: var(--tertiary-bg) !important;
+}
+
+/* Preserve button colors in dark mode */
+.dark-mode .button-primary,
+.dark-mode .bg-primary,
+.dark-mode button.bg-primary,
+.dark-mode a.bg-primary {
+  color: var(--button-text) !important;
+  background-color: var(--primary-color) !important;
+}
+
+/* Preserve badge colors in dark mode */
+.dark-mode .badge,
+.dark-mode span[class*='badge'],
+.dark-mode div[class*='badge'],
+.dark-mode [class*='status-'],
+.dark-mode [class*='tag-'],
+.dark-mode .chip,
+.dark-mode .label {
+  /* Preserve original colors for badges */
+  color: initial !important;
+  background-color: initial !important;
+  border-color: initial !important;
+  fill: initial !important;
+  stroke: initial !important;
+}
+
+/* Ensure proper contrast for inputs in dark mode */
+.dark-mode input::placeholder,
+.dark-mode textarea::placeholder {
+  color: #aaaaaa !important;
+}
+
+/* Preserve original colors for icons, logos, and badges */
+.dark-mode svg.preserve-color,
+.dark-mode img.logo,
+.dark-mode .badge svg,
+.dark-mode span[class*='badge'] svg,
+.dark-mode div[class*='badge'] svg,
+.dark-mode .icon,
+.dark-mode .logo {
+  fill: initial !important;
+  stroke: initial !important;
+  color: initial !important;
+}
+
+/* Add preserve-color class to all Lucide icons to maintain their original colors */
+.dark-mode .lucide {
+  color: inherit !important;
+  fill: inherit !important;
+  stroke: inherit !important;
 }
 
 

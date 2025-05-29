@@ -56,19 +56,23 @@ function ContractSigning({ onClose }: ContractSigningProps) {
   const [signingContractId, setSigningContractId] = useState<string | null>(null)
 
   useEffect(() => {
+    let isMounted = true; // Flag to track if component is mounted
+    
     const fetchContracts = async () => {
+      if (!isMounted) return; // Don't proceed if unmounted
+      
       setLoading(true)
       setError(null)
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('Not authenticated')
+        if (!user || !isMounted) throw new Error('Not authenticated')
         // Get client profile
         const { data: clientProfile } = await supabase
           .from('client_profiles')
           .select('id')
           .eq('user_id', user.id)
           .single()
-        if (!clientProfile) throw new Error('Client profile not found')
+        if (!clientProfile || !isMounted) throw new Error('Client profile not found')
         // Fetch contracts for this client with status 'pending'
         const { data, error } = await supabase
           .from('contracts')
@@ -76,14 +80,28 @@ function ContractSigning({ onClose }: ContractSigningProps) {
           .eq('client_id', clientProfile.id)
           .eq('status', 'pending')
         if (error) throw error
-        setContracts(data || [])
+        
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setContracts(data || [])
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
+    
     fetchContracts()
+    
+    // Cleanup function to prevent state updates after unmounting
+    return () => {
+      isMounted = false;
+    };
   }, [])
 
   const clearSignature = () => {
@@ -103,10 +121,14 @@ function ContractSigning({ onClose }: ContractSigningProps) {
 
   // DEBUG: Log all contracts for the current client
   useEffect(() => {
+    let isMounted = true;
+    
     const debugFetchContracts = async () => {
       try {
+        if (!isMounted) return;
+        
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        if (!user || !isMounted) {
           console.log('DEBUG: No user logged in');
           return;
         }
@@ -115,7 +137,7 @@ function ContractSigning({ onClose }: ContractSigningProps) {
           .select('id')
           .eq('user_id', user.id)
           .single();
-        if (!clientProfile) {
+        if (!clientProfile || !isMounted) {
           console.log('DEBUG: No client profile found');
           return;
         }
@@ -123,19 +145,32 @@ function ContractSigning({ onClose }: ContractSigningProps) {
           .from('contracts')
           .select('*')
           .eq('client_id', clientProfile.id);
+        if (!isMounted) return;
+        
         if (error) {
           console.log('DEBUG: Error fetching contracts:', error);
         } else {
           console.log('DEBUG: Contracts for client:', contracts);
         }
       } catch (err) {
-        console.log('DEBUG: Exception fetching contracts:', err);
+        if (isMounted) {
+          console.log('DEBUG: Exception fetching contracts:', err);
+        }
       }
     };
+    
     debugFetchContracts();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleClientSign = async (contractId: string, signature: string) => {
+    // Create a mounted flag for this specific function execution
+    let isMounted = true;
+    const checkMounted = () => isMounted;
+    
     try {
       setLoading(true);
       
@@ -150,32 +185,48 @@ function ContractSigning({ onClose }: ContractSigningProps) {
         })
         .eq('id', contractId);
 
+      // Check if component is still mounted before proceeding
+      if (!checkMounted()) return;
+
       if (updateError) {
         console.error('DEBUG: Supabase update error:', updateError);
         throw updateError;
       }
 
-      // Refresh contracts list
-      setContracts(prevContracts => 
-        prevContracts.map(contract => 
-          contract.id === contractId 
-            ? { ...contract, client_signature: signature, status: 'signed' }
-            : contract
-        )
-      );
+      // Refresh contracts list - only if still mounted
+      if (checkMounted()) {
+        setContracts(prevContracts => 
+          prevContracts.map(contract => 
+            contract.id === contractId 
+              ? { ...contract, client_signature: signature, status: 'signed' }
+              : contract
+          )
+        );
 
-      setShowSignatureModal(false);
-      setSelectedContract(null);
-      setSigningContractId(null);
-      
-      // Show success message
-      toast.success('Contract signed successfully!');
+        setShowSignatureModal(false);
+        setSelectedContract(null);
+        setSigningContractId(null);
+        
+        // Show success message
+        toast.success('Contract signed successfully!');
+      }
     } catch (error) {
-      console.error('DEBUG: Error signing contract:', error);
-      toast.error('Failed to sign contract. Please try again.');
+      // Only show error if still mounted
+      if (checkMounted()) {
+        console.error('DEBUG: Error signing contract:', error);
+        toast.error('Failed to sign contract. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      // Only update loading state if still mounted
+      if (checkMounted()) {
+        setLoading(false);
+      }
     }
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   };
 
 

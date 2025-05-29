@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, UserCircle, ShieldCheck, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Upload, UserCircle, ShieldCheck, CheckCircle, ArrowRight, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import UploadDetails from './UploadDetails';
 import CreateProfile from './CreateProfile';
@@ -13,29 +13,37 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string>('');
+  const [hasValidProfile, setHasValidProfile] = useState(true);
 
   // Check verification status on mount
   useEffect(() => {
     const checkVerificationStatus = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+        if (!user) {
+          setHasValidProfile(false);
+          throw new Error('Not authenticated');
+        }
         
         setUserId(user.id);
         
-        // Check if user has already completed onboarding
-        const { data: profile } = await supabase
+        // Check if user has a valid entry in the database
+        const { data: profile, error } = await supabase
           .from('freelancer_profiles')
           .select('verification_status')
           .eq('user_id', user.id)
           .single();
-          
-        if (profile?.verification_status === 'approved') {
+        
+        // If no profile exists, mark as invalid profile
+        if (error || !profile) {
+          setHasValidProfile(false);
+        } else if (profile?.verification_status === 'approved') {
           onComplete();
           return;
         }
       } catch (error) {
         console.error('Error checking verification status:', error);
+        setHasValidProfile(false);
       } finally {
         setIsLoading(false);
       }
@@ -107,13 +115,47 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
     }
   };
 
-  const CurrentStepComponent = steps[currentStep - 1].component;
+  // Safely get the current step component with fallback
+  const currentStepObj = steps[currentStep - 1] || steps[0];
+  const CurrentStepComponent = currentStepObj?.component || (() => <div>Step not found</div>);
+
+  // Handle redirect to signup
+  const handleBackToSignup = async () => {
+    // Sign out current session if any
+    await supabase.auth.signOut();
+    // Redirect to root which should show the login/signup page
+    window.location.href = '/';
+  };
 
   // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  // Show error and back to signup button if no valid profile
+  if (!hasValidProfile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <div className="text-red-500 mb-4 text-5xl flex justify-center">
+            <LogIn size={64} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Authentication Error</h2>
+          <p className="text-gray-600 mb-6">
+            It looks like you're trying to access the freelancer onboarding process without properly signing up.
+            Please go back to the sign-up page to create an account first.
+          </p>
+          <button
+            onClick={handleBackToSignup}
+            className="w-full py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Back to Sign Up
+          </button>
+        </div>
       </div>
     );
   }
@@ -184,6 +226,16 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
             {currentStep === steps.length ? 'Submit for Review' : 'Next'}
             <ArrowRight className="ml-2" size={18} />
           </button>
+          
+          {currentStep === 1 && (
+            <button
+              onClick={handleBackToSignup}
+              className="ml-4 flex items-center px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            >
+              <LogIn className="mr-2" size={18} />
+              Back to Sign Up
+            </button>
+          )}
           </div>
       </div>
     </div>

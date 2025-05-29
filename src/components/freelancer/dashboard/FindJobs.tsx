@@ -1,18 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Search, 
-  Filter, 
-  ChevronDown, 
   Building2, 
   Clock, 
   DollarSign, 
   MapPin, 
   Briefcase,
-  Star,
   BookmarkPlus,
-  ExternalLink,
-  Users,
-  CheckCircle,
   AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
@@ -232,7 +226,7 @@ function FindJobs() {
                 </div>
                 <button
                   className="px-6 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538]"
-                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { section: 'proposals', jobId: job.id } }))}
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { section: 'proposals', jobId: job.id, openModal: true, triggerId: Date.now().toString() + Math.random().toString(36).substring(2) } }))}
                 >
                   Apply Now
                 </button>

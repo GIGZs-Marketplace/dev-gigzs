@@ -7,16 +7,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          DEFAULT: '#00704A',
-          light: '#008f5e',
-          dark: '#005939',
-        }
+        primary: '#00704a',
+        secondary: '#f7f7f7',
+        dark: '#272727',
       },
-      fontFamily: {
-        onset: ['Onset', 'sans-serif'],
-        rubik: ['Rubik', 'sans-serif'],
-      }
     },
   },
   plugins: [],
