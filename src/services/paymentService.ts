@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { notificationsService } from './notifications';
+import { notificationsService } from './notifications.ts';
 import { Payment } from '../types/database';
 
 interface ContractWithClient {
