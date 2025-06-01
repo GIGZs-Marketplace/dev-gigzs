@@ -1,6 +1,6 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+  command = "npm run build && mkdir -p .next && cp -r dist/* .next/"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -8,4 +8,9 @@
 [[redirects]]
   from = "/*"
   to = "/index.html"
-  status = 200 
+  status = 200
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+  [plugins.inputs]
+    nextConfigDir = "." 
