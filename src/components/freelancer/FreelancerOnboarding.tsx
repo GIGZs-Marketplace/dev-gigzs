@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, UserCircle, ShieldCheck, CheckCircle, ArrowRight, ArrowLeft, LogIn } from 'lucide-react';
+import { Upload, UserCircle, ShieldCheck, CheckCircle, ArrowRight, ArrowLeft, LogIn, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import UploadDetails from './UploadDetails';
 import CreateProfile from './CreateProfile';
 import Verification from './Verification';
+import QuestionnairePage from '../../pages/QuestionnairePage';
 
 interface FreelancerOnboardingProps {
   onComplete: () => void;
@@ -67,8 +68,15 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
       component: UploadDetails,
       description: 'Upload required documents'
     },
+    {
+      number: 3,
+      title: 'Ethos Assessment',
+      icon: FileText,
+      component: QuestionnairePage,
+      description: 'Answer a few questions'
+    },
     { 
-      number: 3, 
+      number: 4, 
       title: 'Verification', 
       icon: ShieldCheck, 
       component: Verification,
@@ -78,11 +86,21 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
 
   const handleNext = async () => {
     if (currentStep < steps.length) {
-      // If moving to verification step, submit for review
-      if (currentStep === steps.length - 1) {
-        await submitForVerification();
+      const currentStepObject = steps[currentStep - 1];
+      if (currentStepObject?.title === 'Ethos Assessment') {
+        try {
+          setIsLoading(true);
+          await submitForVerification(); // This updates status to 'in_review'
+          setCurrentStep(prev => prev + 1); // Proceed to Verification step
+        } catch (error) {
+          console.error("Failed to submit for verification after questionnaire:", error);
+          // Optionally, display an error message to the user here
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setCurrentStep(prev => prev + 1);
       }
-      setCurrentStep(prev => prev + 1);
     }
   };
 
@@ -202,7 +220,20 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
 
         {/* Current Step Content */}
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <CurrentStepComponent onNext={handleNext} onBack={handleBack} />
+          {(() => {
+            if (!currentStepObj) return <div>Step configuration error.</div>;
+
+            if (currentStepObj.title === 'Personal Details') {
+              return <CreateProfile userId={userId} onNext={handleNext} onBack={handleBack} />;
+            } else if (currentStepObj.title === 'Documents & Links') {
+              return <UploadDetails userId={userId} onNext={handleNext} onBack={handleBack} />;
+            } else if (currentStepObj.title === 'Ethos Assessment') {
+              return <QuestionnairePage userId={userId} onComplete={handleNext} />;
+            } else if (currentStepObj.title === 'Verification') {
+              return <Verification userId={userId} />;
+            }
+            return <div>Step component not found for {currentStepObj.title}.</div>;
+          })()}
         </div>
 
         {/* Navigation Buttons */}

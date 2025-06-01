@@ -65,6 +65,9 @@ function MyProposals({ sectionState }: MyProposalsProps) {
     cover_letter: '',
     proposed_rate: null as number | null
   })
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false)
+  const [searchJobTerm, setSearchJobTerm] = useState('')
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const navigate = useNavigate()
   
@@ -337,7 +340,12 @@ function MyProposals({ sectionState }: MyProposalsProps) {
       await fetchProposals()
       
       // Show success message
-      alert('Proposal created successfully!')
+      setShowSuccessAlert(true)
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setShowSuccessAlert(false)
+      }, 3000)
     } catch (error) {
       console.error('Error creating proposal:', error)
       alert('Failed to create proposal. Please try again.')
@@ -511,6 +519,21 @@ function MyProposals({ sectionState }: MyProposalsProps) {
         )}
       </div>
 
+      {/* Success Alert */}
+      {showSuccessAlert && (
+        <div className="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md z-50 animate-fade-in-out">
+          <div className="flex items-center">
+            <div className="py-1">
+              <CheckCircle className="h-6 w-6 text-green-500 mr-4" />
+            </div>
+            <div>
+              <p className="font-bold">Success!</p>
+              <p className="text-sm">Your proposal has been submitted successfully.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -519,17 +542,72 @@ function MyProposals({ sectionState }: MyProposalsProps) {
             <form onSubmit={createProposal}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Job</label>
-                  <select
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                    value={newProposal.job_id}
-                    onChange={(e) => setNewProposal({...newProposal, job_id: e.target.value})}
-                  >
-                    <option value="">Select a job</option>
-                    {availableJobs.map(job => (
-                      <option key={job.id} value={job.id}>{job.title}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Project</label>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search projects..."
+                      className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00704A] focus:border-[#00704A]"
+                      value={searchJobTerm}
+                      onChange={(e) => setSearchJobTerm(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto bg-white">
+                    {availableJobs
+                      .filter(job => job.title.toLowerCase().includes(searchJobTerm.toLowerCase()) || 
+                                    (job.description && job.description.toLowerCase().includes(searchJobTerm.toLowerCase())))
+                      .map(job => (
+                        <div 
+                          key={job.id} 
+                          className={`p-3 border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors ${job.id === newProposal.job_id ? 'bg-green-50 border-l-4 border-l-[#00704A]' : ''}`}
+                          onClick={() => {
+                            setNewProposal({...newProposal, job_id: job.id});
+                            setSelectedJob(job);
+                          }}
+                        >
+                          <div className="font-medium text-gray-900">{job.title}</div>
+                          {job.description && (
+                            <div className="text-sm text-gray-600 mt-1 line-clamp-2">{job.description}</div>
+                          )}
+                          <div className="flex flex-wrap items-center mt-2 text-xs text-gray-500 gap-3">
+                            {job.budget_amount && (
+                              <div className="flex items-center">
+                                <DollarSign size={12} className="mr-1" />
+                                ${job.budget_amount.toLocaleString()}{job.budget_type === 'hourly' ? '/hr' : ''}
+                              </div>
+                            )}
+                            {job.duration && (
+                              <div className="flex items-center">
+                                <Clock size={12} className="mr-1" />
+                                {job.duration.replace(/_/g, ' ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                    {availableJobs.filter(job => 
+                      job.title.toLowerCase().includes(searchJobTerm.toLowerCase()) || 
+                      (job.description && job.description.toLowerCase().includes(searchJobTerm.toLowerCase()))
+                    ).length === 0 && (
+                      <div className="p-4 text-center text-gray-500">
+                        No projects found matching your search.
+                      </div>
+                    )}
+                  </div>
+                  
+                  {newProposal.job_id && selectedJob && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="text-sm font-medium text-gray-700">Selected Project:</div>
+                      <div className="font-medium text-[#00704A]">{selectedJob.title}</div>
+                    </div>
+                  )}
+                  
+                  {!newProposal.job_id && (
+                    <div className="text-xs text-red-500 mt-1">Please select a project to continue</div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Cover Letter</label>

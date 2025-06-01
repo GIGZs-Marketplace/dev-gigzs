@@ -62,6 +62,8 @@ function Contracts() {
   const [uploadingContractId, setUploadingContractId] = useState<string | null>(null)
   const [progressUpdating, setProgressUpdating] = useState<string | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
+  const [showSignSuccessAlert, setShowSignSuccessAlert] = useState(false);
+  const [signErrorMessage, setSignErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchContracts = async () => {
@@ -307,10 +309,20 @@ function Contracts() {
       );
       setShowSignatureModal(false);
       console.log('[DEBUG] Contract signed successfully, local state updated.');
-      alert('Contract signed successfully!'); // Simple alert for feedback
-    } catch (err) {
-      console.error('[DEBUG] Error in handleSaveFreelancerSignature catch block:', err);
-      alert('Failed to sign contract. Please try again.'); // Simple alert for error
+      setShowSignSuccessAlert(true);
+      setShowSignatureModal(false);
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setShowSignSuccessAlert(false);
+      }, 3000);
+    } catch (error) {
+      setSignErrorMessage(error instanceof Error ? error.message : 'Failed to sign contract. Please try again.');
+      
+      // Hide error message after 3 seconds
+      setTimeout(() => {
+        setSignErrorMessage(null);
+      }, 3000)
     } finally {
       setSignatureLoading(false);
       setSigningContractId(null);
@@ -521,7 +533,32 @@ function Contracts() {
                   </div>
                   <div className="flex items-center">
                     <Calendar size={16} className="mr-1" />
-                    <span>{new Date(contract.startDate).toLocaleDateString()} - {new Date(contract.endDate).toLocaleDateString()}</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm">{new Date(contract.startDate).toLocaleDateString()} - {new Date(contract.endDate).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">
+                        Expires on: {(() => {
+                          // Calculate duration in days
+                          const startDate = new Date(contract.startDate);
+                          const endDate = new Date(contract.endDate);
+                          const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          
+                          // Format duration in a human-readable way
+                          if (diffDays < 30) {
+                            return `${diffDays} days`;
+                          } else if (diffDays < 365) {
+                            const months = Math.ceil(diffDays / 30);
+                            return `${months} month${months > 1 ? 's' : ''}`;
+                          } else {
+                            const years = Math.floor(diffDays / 365);
+                            const remainingMonths = Math.ceil((diffDays % 365) / 30);
+                            return remainingMonths > 0 ? 
+                              `${years} year${years > 1 ? 's' : ''} ${remainingMonths} month${remainingMonths > 1 ? 's' : ''}` : 
+                              `${years} year${years > 1 ? 's' : ''}`;
+                          }
+                        })()}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -630,7 +667,36 @@ function Contracts() {
               </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-6 relative">
+        {/* Success Alert */}
+        {showSignSuccessAlert && (
+          <div className="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md z-50 animate-fade-in-out">
+            <div className="flex items-center">
+              <div className="py-1">
+                <CheckCircle className="h-6 w-6 text-green-500 mr-4" />
+              </div>
+              <div>
+                <p className="font-bold">Success!</p>
+                <p className="text-sm">Contract signed successfully.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Error Alert */}
+        {signErrorMessage && (
+          <div className="fixed top-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md z-50 animate-fade-in-out">
+            <div className="flex items-center">
+              <div className="py-1">
+                <AlertCircle className="h-6 w-6 text-red-500 mr-4" />
+              </div>
+              <div>
+                <p className="font-bold">Error</p>
+                <p className="text-sm">{signErrorMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
               {/* Contract Details */}
               <div className="grid grid-cols-2 gap-4">
                 <div>

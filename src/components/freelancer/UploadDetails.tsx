@@ -21,11 +21,12 @@ interface ProfileLinks {
 }
 
 interface UploadDetailsProps {
-  onNext: () => void
-  onBack: () => void
+  userId?: string; // Added to accept userId from FreelancerOnboarding
+  onNext: () => void;
+  onBack: () => void;
 }
 
-function UploadDetails({ onNext, onBack }: UploadDetailsProps) {
+function UploadDetails({ onNext, onBack, userId }: UploadDetailsProps) { // Added userId to props destructuring
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [links, setLinks] = useState<ProfileLinks>({

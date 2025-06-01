@@ -27,6 +27,8 @@ interface Job {
   skills_required: string[]
   status: string
   created_at: string
+  start_date?: string
+  end_date?: string
   client: {
     company_name: string
     industry: string
@@ -208,7 +210,31 @@ function FindJobs() {
                   <Clock className="text-gray-400" size={18} />
                   <div>
                     <p className="text-xs text-gray-500">Duration</p>
-                    <p className="text-sm font-medium">{job.duration?.replace(/_/g, ' ')}</p>
+                    <p className="text-sm font-medium">
+                      {job.duration ? job.duration.replace(/_/g, ' ') : 
+                        // Calculate duration from start and end dates if available
+                        (job.start_date && job.end_date) ? 
+                          (() => {
+                            const start = new Date(job.start_date);
+                            const end = new Date(job.end_date);
+                            const diffTime = Math.abs(end.getTime() - start.getTime());
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            
+                            if (diffDays < 30) {
+                              return `${diffDays} days`;
+                            } else if (diffDays < 365) {
+                              const months = Math.ceil(diffDays / 30);
+                              return `${months} month${months > 1 ? 's' : ''}`;
+                            } else {
+                              const years = Math.floor(diffDays / 365);
+                              const remainingMonths = Math.ceil((diffDays % 365) / 30);
+                              return remainingMonths > 0 ? 
+                                `${years} year${years > 1 ? 's' : ''} ${remainingMonths} month${remainingMonths > 1 ? 's' : ''}` : 
+                                `${years} year${years > 1 ? 's' : ''}`;
+                            }
+                          })() : 'Not specified'
+                      }
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">

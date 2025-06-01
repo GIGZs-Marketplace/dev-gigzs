@@ -58,6 +58,7 @@ import Reviews from './components/freelancer/dashboard/Reviews'
 import SecurityPage from './components/freelancer/dashboard/SecurityPage'
 import HelpCenter from './components/freelancer/dashboard/HelpCenter'
 import { supabase } from './lib/supabase'
+import TermsAndConditions from './components/TermsAndConditions'
 
 function App() {
   const [onboardingStatus, setOnboardingStatus] = useState<'loading' | 'incomplete' | 'complete'>('loading');
@@ -74,6 +75,7 @@ function App() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [sectionState, setSectionState] = useState<any>(null);
+  const [showTerms, setShowTerms] = useState(false);
 
   
   // Handle custom navigation events
@@ -383,6 +385,42 @@ function App() {
     }
   }
 
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const response = await fetch('https://api.gigzs.com/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Show terms popup immediately after successful login
+      setShowTerms(true);
+      
+      // Don't set isAuthenticated until terms are accepted
+      // This will keep the user on the login screen until they accept
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Login failed. Please try again.');
+    }
+  };
+
+  const handleAcceptTerms = () => {
+    setShowTerms(false);
+    // Only set isAuthenticated after terms are accepted
+    setIsAuthenticated(true);
+    localStorage.setItem('termsAccepted', 'true');
+  };
+
   if (!sessionChecked) {
     // Don't show login/signup until session check is complete
     return null;
@@ -395,7 +433,7 @@ function App() {
             onSwitch={() => setShowSignup(false)}
             onSuccess={(type: 'freelancer' | 'client') => {
               setUserType(type)
-              setIsAuthenticated(true)
+              setShowTerms(true); // Show terms after signup
             }}
           />
         ) : (
@@ -403,10 +441,11 @@ function App() {
             onSwitch={() => setShowSignup(true)}
             onSuccess={(type: 'freelancer' | 'client') => {
               setUserType(type)
-              setIsAuthenticated(true)
+              setShowTerms(true); // Show terms after login
             }}
           />
         )}
+        {showTerms && <TermsAndConditions onAccept={handleAcceptTerms} />}
       </div>
     )
   }
@@ -551,6 +590,7 @@ function App() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--secondary-bg)', color: 'var(--primary-text)' }}>
+      {showTerms && <TermsAndConditions onAccept={handleAcceptTerms} />}
       {/* Sidebar */}
       <aside 
         className={`bg-primary text-white fixed left-0 top-0 h-screen transition-all duration-300 ${
@@ -558,12 +598,12 @@ function App() {
         }`}
       >
         <div className="h-16 px-4 flex items-center justify-between border-b border-primary">
-          <h1 className={`font-sans font-bold ${isSidebarOpen ? 'block' : 'hidden'}`}>
+          <h1 className={`font-sans font-bold sidebar-header ${isSidebarOpen ? 'block' : 'hidden'}`}>
             {userType === 'freelancer' ? 'Freelancer Hub' : 'Client Hub'}
           </h1>
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-primary rounded-lg"
+            className="p-2 hover:bg-primary rounded-lg text-white"
           >
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -577,7 +617,7 @@ function App() {
                 {freelancerMenuSections.map((section, sectionIndex) => (
                   <div key={sectionIndex}>
                     {isSidebarOpen && (
-                      <h2 className="px-2 text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+                      <h2 className="px-2 text-xs font-semibold uppercase tracking-wider mb-2 sidebar-section-title">
                         {section.title}
                       </h2>
                     )}
@@ -670,6 +710,14 @@ function App() {
         <div className="pt-20 px-6 pb-8">
           {renderContent()}
         </div>
+
+        {/* Copyright Footer */}
+        <div className="text-center py-4 text-sm text-gray-500 border-t" style={{ borderColor: 'var(--border-color)' }}>
+          <p>
+            © 2025 <a href="https://gigzs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">gigzs.com</a> | 
+            Designed by <a href="https://uimitra.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">uimitra.com</a>
+          </p>
+        </div>
       </main>
 
       {/* Delete Account Confirmation Modal */}
@@ -721,7 +769,7 @@ function NavItem({
       className={`w-full flex items-center px-3 py-2 rounded-lg transition-all duration-200 ease-in-out cursor-pointer ${
         isActive
           ? 'bg-primary text-white scale-105 shadow-md'
-          : 'text-gray-100 hover:bg-primary hover:text-white hover:scale-105 hover:shadow-lg'
+          : 'text-white hover:bg-primary hover:text-white hover:scale-105 hover:shadow-lg'
       }`}
     >
       <span className="min-w-[2rem]">{icon}</span>
@@ -729,5 +777,18 @@ function NavItem({
     </button>
   )
 }
+
+const styles = `
+  .sidebar-header {
+    color: white !important;
+  }
+  .sidebar-section-title {
+    color: white !important;
+  }
+`;
+
+const styleSheet = document.createElement("style");
+styleSheet.innerText = styles;
+document.head.appendChild(styleSheet);
 
 export default App

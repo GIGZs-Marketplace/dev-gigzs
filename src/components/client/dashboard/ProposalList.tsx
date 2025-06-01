@@ -527,9 +527,9 @@ function ProposalList() {
               </div>
               {/* Accept/Reject Buttons */}
               {proposal.status === 'pending' && (
-                <div className="mt-6 flex space-x-3">
+                <div className="mt-6 flex space-x-4">
                   <button
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+                    className="px-6 py-2.5 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] transition-colors shadow-sm flex items-center justify-center font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                     disabled={loading}
                     onClick={async () => {
                       setLoading(true)
@@ -624,7 +624,7 @@ function ProposalList() {
                     Accept
                   </button>
                   <button
-                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+                    className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm flex items-center justify-center font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                     disabled={loading}
                     onClick={async () => {
                       setLoading(true)

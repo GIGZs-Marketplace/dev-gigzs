@@ -103,8 +103,8 @@ function ProjectList() {
           onClick={() => setShowPostJob(true)}
           className="flex items-center px-6 py-3 bg-[#00704A] text-white rounded-xl hover:bg-[#005538] text-lg font-semibold shadow-md transition-all duration-300"
         >
-          <Plus size={24} className="mr-2" />
-          Post New Job
+          <Plus size={24} className="mr-2 text-white" />
+          <span className="text-white">Post New Job</span>
         </button>
       </div>
 

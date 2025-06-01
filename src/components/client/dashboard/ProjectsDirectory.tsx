@@ -9,6 +9,7 @@ function ProjectsDirectory() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [projects, setProjects] = useState<any[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
     title: '',
@@ -204,6 +205,14 @@ function ProjectsDirectory() {
         .order('created_at', { ascending: false })
       if (!jobsError && jobsData) setJobs(jobsData)
       setJobsLoading(false)
+      
+      // Show success message
+      setShowSuccessMessage(true)
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setShowSuccessMessage(false)
+      }, 3000)
     } catch (error: any) {
       console.error('Error creating job:', error)
       alert('Error creating job: ' + (error.message || error))
@@ -395,10 +404,27 @@ function ProjectsDirectory() {
       </div>
 
 
+      {/* Success Message */}
+      {showSuccessMessage && (
+        <div className="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md z-50 animate-fade-in-out">
+          <div className="flex items-center">
+            <div className="py-1">
+              <svg className="fill-current h-6 w-6 text-green-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z"/>
+              </svg>
+            </div>
+            <div>
+              <p className="font-bold">Success!</p>
+              <p className="text-sm">Your project has been created successfully.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Project Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Create New Project</h3>
               <button
@@ -432,7 +458,7 @@ function ProjectsDirectory() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Start Date</label>
                   <input
@@ -455,7 +481,7 @@ function ProjectsDirectory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Budget</label>
                   <input
@@ -502,7 +528,7 @@ function ProjectsDirectory() {
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 mt-6">
+              <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}

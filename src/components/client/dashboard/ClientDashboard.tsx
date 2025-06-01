@@ -96,8 +96,8 @@ function ClientDashboard() {
                 onClick={() => setShowPostJob(true)}
                 className="flex items-center px-4 py-2 bg-[#00704A] text-white rounded-lg hover:bg-[#005538] transition-colors w-full sm:w-auto justify-center"
               >
-                <PlusCircle size={20} className="mr-2" />
-                Post New Job
+                <PlusCircle size={20} className="mr-2 text-white" />
+                <span className="text-white">Post New Job</span>
               </button>
             </div>
           </div>

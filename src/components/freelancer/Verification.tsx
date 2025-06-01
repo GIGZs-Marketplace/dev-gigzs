@@ -3,11 +3,10 @@ import { CheckCircle2, Clock, ShieldCheck, AlertCircle, Home } from 'lucide-reac
 import { useNavigate } from 'react-router-dom'
 
 interface VerificationProps {
-  onNext: () => void
-  onBack: () => void
+  userId?: string; // Added to accept userId, can be used to fetch actual verification status
 }
 
-function Verification({ onNext }: VerificationProps) {
+function Verification({ userId }: VerificationProps) { // Removed onNext, added userId
   const navigate = useNavigate();
   return (
     <div className="space-y-6">

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
 interface CreateProfileProps {
+  userId?: string; // Added to accept userId from FreelancerOnboarding
   onNext: (data: any) => void;
   onBack?: () => void;
 }
@@ -21,7 +22,7 @@ interface FormData {
   bio: string;
 }
 
-function CreateProfile({ onNext }: CreateProfileProps) {
+function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId to props destructuring
   const navigate = useNavigate();
   const [formData, setFormData] = useState<FormData>({
     full_name: '',

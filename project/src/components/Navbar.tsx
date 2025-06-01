@@ -156,7 +156,7 @@ const Navbar = () => {
                   gap: '1rem',
                 }}>
                   <button
-                    onClick={() => {/* Add login logic */}}
+                    onClick={() => window.location.href = 'http://localhost:5173/login'}
                     style={{
                       padding: '0.75rem 2rem',
                       backgroundColor: 'white',
@@ -164,12 +164,13 @@ const Navbar = () => {
                       fontWeight: 600,
                       borderRadius: '0.5rem',
                       transition: 'background-color 0.3s',
+                      cursor: 'pointer',
                     }}
                   >
                     Login
                   </button>
                   <button
-                    onClick={() => {/* Add signup logic */}}
+                    onClick={() => window.location.href = 'http://localhost:5173/signup'}
                     style={{
                       padding: '0.75rem 2rem',
                       backgroundColor: 'transparent',
@@ -178,6 +179,7 @@ const Navbar = () => {
                       fontWeight: 600,
                       borderRadius: '0.5rem',
                       transition: 'background-color 0.3s',
+                      cursor: 'pointer',
                     }}
                   >
                     Sign Up
