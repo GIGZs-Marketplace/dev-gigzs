@@ -47,7 +47,7 @@ function Reports() {
     datasets: [
       {
         label: 'Earnings',
-        data: [4500, 5200, 4800, 6100, 5800, 7200],
+        data: [], // TODO: Populate with real earnings trend data
         borderColor: 'var(--primary-color)',
         backgroundColor: 'var(--primary-color)10',
         tension: 0.4,
@@ -61,13 +61,8 @@ function Reports() {
     labels: ['Web Development', 'Mobile Apps', 'UI/UX Design', 'Backend Development'],
     datasets: [
       {
-        data: [40, 25, 20, 15],
-        backgroundColor: [
-          'rgba(0, 112, 74, 0.8)',
-          'rgba(0, 112, 74, 0.6)',
-          'rgba(0, 112, 74, 0.4)',
-          'rgba(0, 112, 74, 0.2)'
-        ],
+        data: [], // TODO: Populate with real project distribution data
+        backgroundColor: [ /* TODO: Populate with real project distribution colors e.g. 'rgba(0, 112, 74, 0.8)' */ ],
         borderColor: 'white',
         borderWidth: 2
       }
@@ -76,11 +71,11 @@ function Reports() {
 
   // Hours Worked Chart Data
   const hoursWorkedData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    labels: [ /* TODO: Populate with real hours worked labels e.g. 'Mon', 'Tue' */ ],
     datasets: [
       {
         label: 'Hours',
-        data: [8, 6, 7, 8, 5, 3, 0],
+        data: [], // TODO: Populate with real hours worked data
         backgroundColor: 'rgba(0, 112, 74, 0.8)'
       }
     ]
@@ -170,10 +165,10 @@ function Reports() {
               <DollarSign className="h-6 w-6 text-green-600" />
             </div>
             <span className="text-sm font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-              +15.3%
+              {/* TODO: Fetch real percentage */}
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$24,500</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch total earnings */}</h3>
           <p className="text-gray-600 text-sm">Total Earnings</p>
         </div>
 
@@ -183,10 +178,10 @@ function Reports() {
               <Clock className="h-6 w-6 text-blue-600" />
             </div>
             <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
-              +8.4%
+              {/* TODO: Fetch real percentage */}
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">164</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch hours worked */}</h3>
           <p className="text-gray-600 text-sm">Hours Worked</p>
         </div>
 
@@ -196,11 +191,11 @@ function Reports() {
               <Users className="h-6 w-6 text-purple-600" />
             </div>
             <span className="text-sm font-medium text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">
-              +12.5%
+              {/* TODO: Fetch real percentage */}
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">8</h3>
-          <p className="text-gray-600 text-sm">Active Clients</p>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch client count */}</h3>
+          <p className="text-gray-600 text-sm">Clients Worked With</p>
         </div>
 
         <div className="bg-white p-6 rounded-xl border border-gray-200">
@@ -209,10 +204,10 @@ function Reports() {
               <Star className="h-6 w-6 text-yellow-600" />
             </div>
             <span className="text-sm font-medium text-yellow-600 bg-yellow-50 px-2.5 py-1 rounded-full">
-              98%
+              {/* TODO: Fetch real rating */}
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">4.9</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch average rating */}</h3>
           <p className="text-gray-600 text-sm">Average Rating</p>
         </div>
       </div>
@@ -274,25 +269,7 @@ function Reports() {
             </button>
           </div>
           <div className="space-y-4">
-            {topClients.map((client) => (
-              <div key={client.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <img
-                    src={client.avatar}
-                    alt={client.name}
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div>
-                    <h4 className="font-medium text-gray-900">{client.name}</h4>
-                    <p className="text-sm text-gray-500">{client.company}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">${client.totalEarnings}</p>
-                  <p className="text-sm text-gray-500">{client.projectsCount} projects</p>
-                </div>
-              </div>
-            ))}
+            {/* TODO: Fetch top clients data from the database */}
           </div>
         </div>
       </div>
@@ -300,31 +277,13 @@ function Reports() {
   )
 }
 
-const topClients = [
-  {
-    id: 1,
-    name: 'Sarah Johnson',
-    company: 'TechCorp Solutions',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    totalEarnings: 12500,
-    projectsCount: 3
-  },
-  {
-    id: 2,
-    name: 'Michael Chen',
-    company: 'InnovateLabs',
-    avatar: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    totalEarnings: 8200,
-    projectsCount: 2
-  },
-  {
-    id: 3,
-    name: 'Emma Wilson',
-    company: 'Design Studio Pro',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    totalEarnings: 6800,
-    projectsCount: 2
-  }
-]
+// TODO: Fetch top projects data from the database
+const topProjects: any[] = [];
 
-export default Reports
+// TODO: Fetch client feedback data from the database
+const clientFeedback: any[] = [];
+
+// TODO: Fetch top clients data from the database
+const topClients: any[] = [];
+
+export default Reports;

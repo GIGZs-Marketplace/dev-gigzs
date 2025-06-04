@@ -34,7 +34,7 @@ function MyEarnings() {
     datasets: [
       {
         label: 'Earnings',
-        data: [4500, 5200, 4800, 6100, 5800, 7200],
+        data: [], // TODO: Populate with real earnings data
         borderColor: 'var(--primary-color)',
         backgroundColor: 'var(--primary-color)10',
         tension: 0.4,
@@ -90,10 +90,10 @@ function MyEarnings() {
               <DollarSign className="h-6 w-6 text-green-600" />
             </div>
             <span className="text-sm font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-              +12.5%
+              {/* TODO: Fetch real percentage */}
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$24,500</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch total earnings */}</h3>
           <p className="text-gray-600 text-sm">Total Earnings</p>
         </div>
 
@@ -106,7 +106,7 @@ function MyEarnings() {
               Pending
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$3,200</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch pending payments */}</h3>
           <p className="text-gray-600 text-sm">Pending Payments</p>
         </div>
 
@@ -119,7 +119,7 @@ function MyEarnings() {
               Available
             </span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$1,850</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch available for withdrawal */}</h3>
           <p className="text-gray-600 text-sm">Available for Withdrawal</p>
         </div>
       </div>
@@ -178,8 +178,8 @@ function MyEarnings() {
                 <CreditCard size={24} className="text-gray-600" />
               </div>
               <div>
-                <h4 className="font-medium">•••• •••• •••• 4242</h4>
-                <p className="text-sm text-gray-500">Expires 12/25</p>
+                <h4 className="font-medium">{/* TODO: Display card number */}</h4>
+                <p className="text-sm text-gray-500">{/* TODO: Display card expiry */}</p>
               </div>
             </div>
             <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
@@ -193,8 +193,8 @@ function MyEarnings() {
                 <Bank size={24} className="text-gray-600" />
               </div>
               <div>
-                <h4 className="font-medium">Bank Account</h4>
-                <p className="text-sm text-gray-500">•••• 5678</p>
+                <h4 className="font-medium">{/* TODO: Display bank account type */}</h4>
+                <p className="text-sm text-gray-500">{/* TODO: Display bank account last digits */}</p>
               </div>
             </div>
             <button className="text-gray-400 hover:text-gray-600">
@@ -273,39 +273,7 @@ function MyEarnings() {
   )
 }
 
-const recentEarnings = [
-  {
-    id: 1,
-    project: 'E-commerce Website Development',
-    client: 'TechCorp Solutions',
-    amount: 2500,
-    date: '2024-03-25',
-    status: 'Completed'
-  },
-  {
-    id: 2,
-    project: 'Mobile App UI Design',
-    client: 'InnovateLabs',
-    amount: 1800,
-    date: '2024-03-24',
-    status: 'Pending'
-  },
-  {
-    id: 3,
-    project: 'Backend API Development',
-    client: 'DataFlow Systems',
-    amount: 3200,
-    date: '2024-03-23',
-    status: 'Completed'
-  },
-  {
-    id: 4,
-    project: 'Website Optimization',
-    client: 'GrowthMedia',
-    amount: 1200,
-    date: '2024-03-22',
-    status: 'Processing'
-  }
-]
+// TODO: Fetch recent earnings data from the database
+const recentEarnings: any[] = [];
 
 export default MyEarnings

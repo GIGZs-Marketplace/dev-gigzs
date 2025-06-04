@@ -41,6 +41,8 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
         } else if (profile?.verification_status === 'approved') {
           onComplete();
           return;
+        } else if (profile?.verification_status === 'in_review') {
+          setCurrentStep(4); // Navigate to Verification step
         }
       } catch (error) {
         console.error('Error checking verification status:', error);
@@ -237,36 +239,45 @@ function FreelancerOnboarding({ onComplete }: FreelancerOnboardingProps) {
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8">
-          <button
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className={`flex items-center px-6 py-2 rounded-lg ${
-              currentStep === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'
-            }`}
-          >
-            <ArrowLeft className="mr-2" size={18} />
-            Back
-          </button>
+        <div className="flex justify-between items-center mt-8">
+          {currentStepObj?.title !== 'Ethos Assessment' && currentStepObj?.title !== 'Verification' && (
+            <button
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className={`flex items-center px-6 py-2 rounded-lg ${
+                currentStep === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'
+              }`}
+            >
+              <ArrowLeft className="mr-2" size={18} />
+              Back
+            </button>
+          )}
+          {/* Placeholder for alignment when Back button is hidden on Ethos Assessment */} 
+          {currentStepObj?.title === 'Ethos Assessment' && <div className="w-[calc(3rem+36px)]"></div>}
           
           <button
             onClick={handleNext}
             disabled={currentStep === steps.length}
             className="flex items-center px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {currentStep === steps.length ? 'Submit for Review' : 'Next'}
+            {currentStep === steps.length ? 'Go to Dashboard' : 'Next'}
             <ArrowRight className="ml-2" size={18} />
           </button>
           
-          {currentStep === 1 && (
+          {(currentStep === 1 || currentStepObj?.title === 'Verification') && (
             <button
               onClick={handleBackToSignup}
-              className="ml-4 flex items-center px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className={`flex items-center px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 ${
+                currentStepObj?.title === 'Verification' ? '' : 'ml-4'
+              }`}
             >
               <LogIn className="mr-2" size={18} />
               Back to Sign Up
             </button>
           )}
+          {/* Original Back to Signup for step 1, now handled above with conditional marginLeft */}
+          {/* currentStep === 1 && ( removed, handled by the combined condition above */}
+          
           </div>
       </div>
     </div>

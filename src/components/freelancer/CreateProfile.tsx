@@ -38,11 +38,25 @@ function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dobError, setDobError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
 
   // Check if all required fields are filled
   useEffect(() => {
+    
+    const isDobValid = () => {
+      if (!formData.date_of_birth) return true; // Don't validate if empty, required will catch it
+      const today = new Date();
+      const birthDate = new Date(formData.date_of_birth);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age >= 18;
+    };
+
     const isValid = 
       formData.full_name.trim() !== '' &&
       formData.email.trim() !== '' &&
@@ -53,9 +67,16 @@ function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId
       formData.state.trim() !== '' &&
       formData.country.trim() !== '' &&
       formData.postal_code.trim() !== '' &&
-      formData.bio.trim() !== '';
+      formData.bio.trim() !== '' &&
+      isDobValid();
     
     setIsFormValid(isValid);
+
+    if (formData.date_of_birth && !isDobValid()) {
+      setDobError('You must be at least 18 years old.');
+    } else {
+      setDobError(null);
+    }
   }, [formData]);
 
   // Fetch user data on mount
@@ -103,6 +124,21 @@ function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId
       ...prev,
       [name]: value
     }));
+
+    if (name === 'date_of_birth') {
+      const today = new Date();
+      const birthDate = new Date(value);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setDobError('You must be at least 18 years old.');
+      } else {
+        setDobError(null);
+      }
+    }
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,6 +149,21 @@ function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      // Validate age before submitting
+      const today = new Date();
+      const birthDate = new Date(formData.date_of_birth);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setError('You must be at least 18 years old to register.');
+        setDobError('You must be at least 18 years old to register.'); // Also show it by the field
+        setIsSubmitting(false);
+        return;
+      }
       
       // Save profile to database
       const { error } = await supabase
@@ -265,6 +316,7 @@ function CreateProfile({ onNext, userId }: CreateProfileProps) { // Added userId
                 required
               />
             </div>
+            {dobError && <p className="mt-2 text-sm text-red-600">{dobError}</p>}
           </div>
 
           {/* Address */}

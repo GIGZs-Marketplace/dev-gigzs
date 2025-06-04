@@ -31,7 +31,7 @@ function Transactions() {
             </div>
             <span className="text-sm text-gray-500">This Month</span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$12,580</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch total received */}</h3>
           <p className="text-gray-600 text-sm">Total Received</p>
         </div>
 
@@ -42,7 +42,7 @@ function Transactions() {
             </div>
             <span className="text-sm text-gray-500">This Month</span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">$2,450</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch total withdrawn */}</h3>
           <p className="text-gray-600 text-sm">Total Withdrawn</p>
         </div>
 
@@ -53,7 +53,7 @@ function Transactions() {
             </div>
             <span className="text-sm text-gray-500">Card Payments</span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">24</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch card payment transaction count */}</h3>
           <p className="text-gray-600 text-sm">Transactions</p>
         </div>
 
@@ -64,7 +64,7 @@ function Transactions() {
             </div>
             <span className="text-sm text-gray-500">Bank Transfers</span>
           </div>
-          <h3 className="text-2xl font-semibold mt-4">18</h3>
+          <h3 className="text-2xl font-semibold mt-4">{/* TODO: Fetch bank transfer transaction count */}</h3>
           <p className="text-gray-600 text-sm">Transactions</p>
         </div>
       </div>
@@ -143,53 +143,61 @@ function Transactions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {transactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">#{transaction.id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {format(new Date(transaction.date), 'MMM dd, yyyy')}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{transaction.description}</div>
-                    <div className="text-sm text-gray-500">{transaction.project}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      ${transaction.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      {transaction.paymentMethod === 'Credit Card' ? (
-                        <CreditCard size={16} className="text-gray-400 mr-2" />
-                      ) : (
-                        <Bank size={16} className="text-gray-400 mr-2" />
-                      )}
-                      <span className="text-sm text-gray-500">{transaction.paymentMethod}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                      transaction.status === 'Completed'
-                        ? 'bg-green-100 text-green-800'
-                        : transaction.status === 'Pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {transaction.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <button className="text-[#00704A] hover:text-[#005538]">
-                      <ExternalLink size={18} />
-                    </button>
+              {transactions.length > 0 ? (
+                transactions.map((transaction: any) => (
+                  <tr key={transaction.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">#{transaction.id}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">
+                        {format(new Date(transaction.date), 'MMM dd, yyyy')}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{transaction.description}</div>
+                      <div className="text-sm text-gray-500">{transaction.project}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className={`text-sm font-medium ${transaction.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        {transaction.amount < 0 ? '-' : ''}${Math.abs(transaction.amount).toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        {transaction.paymentMethod === 'Credit Card' ? (
+                          <CreditCard size={16} className="text-gray-400 mr-2" />
+                        ) : (
+                          <Bank size={16} className="text-gray-400 mr-2" />
+                        )}
+                        <span className="text-sm text-gray-500">{transaction.paymentMethod}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                        transaction.status === 'Completed'
+                          ? 'bg-green-100 text-green-800'
+                          : transaction.status === 'Pending'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {transaction.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button className="text-[#00704A] hover:text-[#005538]">
+                        <ExternalLink size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                    No transactions to display.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -198,7 +206,7 @@ function Transactions() {
         <div className="px-6 py-4 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-500">
-              Showing 1 to 10 of 42 transactions
+              {/* TODO: Implement dynamic pagination text */}
             </div>
             <div className="flex space-x-2">
               <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -215,52 +223,7 @@ function Transactions() {
   )
 }
 
-const transactions = [
-  {
-    id: 'TRX-001',
-    date: '2024-03-25',
-    description: 'Project Payment',
-    project: 'E-commerce Website Development',
-    amount: 2500,
-    paymentMethod: 'Credit Card',
-    status: 'Completed'
-  },
-  {
-    id: 'TRX-002',
-    date: '2024-03-24',
-    description: 'Milestone Payment',
-    project: 'Mobile App UI Design',
-    amount: 1800,
-    paymentMethod: 'Bank Transfer',
-    status: 'Pending'
-  },
-  {
-    id: 'TRX-003',
-    date: '2024-03-23',
-    description: 'Project Payment',
-    project: 'Backend API Development',
-    amount: 3200,
-    paymentMethod: 'Credit Card',
-    status: 'Completed'
-  },
-  {
-    id: 'TRX-004',
-    date: '2024-03-22',
-    description: 'Withdrawal',
-    project: 'Bank Transfer',
-    amount: 5000,
-    paymentMethod: 'Bank Transfer',
-    status: 'Completed'
-  },
-  {
-    id: 'TRX-005',
-    date: '2024-03-21',
-    description: 'Project Payment',
-    project: 'Website Optimization',
-    amount: 1200,
-    paymentMethod: 'Credit Card',
-    status: 'Failed'
-  }
-]
+// TODO: Fetch transactions data from the database
+const transactions: any[] = [];
 
 export default Transactions

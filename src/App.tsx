@@ -65,6 +65,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isOnboarding, setIsOnboarding] = useState(true)
   const [userType, setUserType] = useState<'freelancer' | 'client'>('freelancer')
   const [activeSection, setActiveSection] = useState('dashboard')
@@ -403,11 +404,9 @@ function App() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       
-      // Show terms popup immediately after successful login
-      setShowTerms(true);
-      
-      // Don't set isAuthenticated until terms are accepted
-      // This will keep the user on the login screen until they accept
+      // User is logging in, set authenticated directly and mark terms as accepted
+      setIsAuthenticated(true);
+      localStorage.setItem('termsAccepted', 'true');
     } catch (error) {
       console.error('Login error:', error);
       alert('Login failed. Please try again.');
@@ -441,7 +440,8 @@ function App() {
             onSwitch={() => setShowSignup(true)}
             onSuccess={(type: 'freelancer' | 'client') => {
               setUserType(type)
-              setShowTerms(true); // Show terms after login
+              setIsAuthenticated(true); // User is logging in, set authenticated directly
+              localStorage.setItem('termsAccepted', 'true'); // Also mark terms accepted here for consistency
             }}
           />
         )}
@@ -589,23 +589,21 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--secondary-bg)', color: 'var(--primary-text)' }}>
+    <div className="min-h-screen flex" style={{ background: 'var(--secondary-bg)', color: 'var(--primary-text)' }}>
       {showTerms && <TermsAndConditions onAccept={handleAcceptTerms} />}
       {/* Sidebar */}
       <aside 
-        className={`bg-primary text-white fixed left-0 top-0 h-screen transition-all duration-300 ${
-          isSidebarOpen ? 'w-64' : 'w-20'
-        }`}
+        className={`fixed top-0 left-0 h-screen bg-primary text-white transition-transform duration-300 ease-in-out z-50 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:transition-all md:duration-300 md:${isSidebarOpen ? 'w-64' : 'w-20'}`}
       >
         <div className="h-16 px-4 flex items-center justify-between border-b border-primary">
-          <h1 className={`font-sans font-bold sidebar-header ${isSidebarOpen ? 'block' : 'hidden'}`}>
+          <h1 className={`font-sans font-bold sidebar-header ${isMobileSidebarOpen || isSidebarOpen ? 'block' : 'hidden'}`}>
             {userType === 'freelancer' ? 'Freelancer Hub' : 'Client Hub'}
           </h1>
           <button 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            onClick={() => { if (isMobileSidebarOpen) { setIsMobileSidebarOpen(false); } else { setIsSidebarOpen(!isSidebarOpen); } }}
             className="p-2 hover:bg-primary rounded-lg text-white"
           >
-            {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            {isMobileSidebarOpen || isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
         
@@ -663,16 +661,18 @@ function App() {
           </nav>
         </div>
       </aside>
+      {/* Mobile Sidebar Overlay */}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-75 z-40 md:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
 
       {/* Main Content */}
       <main 
-        className={`min-h-screen transition-all duration-300 ${
-          isSidebarOpen ? 'ml-64' : 'ml-20'
-        }`}
+        className={`flex-1 min-h-screen transition-margin duration-300 overflow-y-auto md:${isSidebarOpen ? 'ml-64' : 'ml-20'}`}
       >
         {/* Header */}
-        <header className="h-16 fixed top-0 right-0 left-0 z-10 border-b" style={{ left: isSidebarOpen ? '16rem' : '5rem', background: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
+        <header className="sticky top-0 h-16 z-30 border-b w-full" style={{ background: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
           <div className="h-full px-6 flex items-center justify-between">
+            
+            <button onClick={() => setIsMobileSidebarOpen(true)} className="p-2 text-gray-600 hover:text-primary md:hidden mr-2"><Menu size={24} /></button>
             <div className="flex items-center flex-1">
               <h2 className="text-xl font-semibold" style={{ color: 'var(--heading-text)' }}>
                 {userType === 'freelancer' ? 'Freelancer Dashboard' : 'Client Dashboard'}
@@ -707,7 +707,7 @@ function App() {
         </header>
 
         {/* Dashboard Content */}
-        <div className="pt-20 px-6 pb-8">
+        <div className="p-6">
           {renderContent()}
         </div>
 

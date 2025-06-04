@@ -198,3 +198,70 @@ input, select, textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  :root {
+    --base-font-size: 14px; /* Slightly smaller base font for mobile */
+  }
+
+  body {
+    font-size: var(--base-font-size);
+  }
+
+  /* Adjust heading sizes for better mobile readability */
+  /* Tailwind's responsive font size classes (e.g., text-xl md:text-2xl) are preferred in components. */
+  /* These are general fallbacks. */
+  h1, .text-4xl {
+    font-size: 2rem; /* Tailwind 'text-3xl' is 1.875rem, 'text-4xl' is 2.25rem. This is between. */
+  }
+  h2, .text-3xl {
+    font-size: 1.75rem; /* Tailwind 'text-2xl' is 1.5rem, 'text-3xl' is 1.875rem. */
+  }
+  h3, .text-2xl {
+    font-size: 1.5rem; /* Tailwind 'text-xl' is 1.25rem, 'text-2xl' is 1.5rem. */
+  }
+
+  /* General container adjustments for mobile */
+  /* If you use a common container class, adjust its padding. */
+  /* Create or adapt this class as needed in your HTML/JSX. */
+  .container {
+    padding-left: 1rem; /* 16px */
+    padding-right: 1rem; /* 16px */
+    width: auto; /* Ensure it doesn't overflow if fixed width was set for desktop */
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --base-font-size: 13px; /* Even smaller for very small screens */
+  }
+
+  body {
+    font-size: var(--base-font-size);
+  }
+
+  h1, .text-4xl {
+    font-size: 1.75rem;
+  }
+  h2, .text-3xl {
+    font-size: 1.5rem;
+  }
+  h3, .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  /* Further adjustments for very small screens */
+  .container {
+    padding-left: 0.75rem; /* 12px */
+    padding-right: 0.75rem; /* 12px */
+  }
+
+  /* Example: Stack flex items vertically by default on small screens */
+  /* You would apply .flex-container to your flex parent elements */
+  /* .flex-container {
+    flex-direction: column;
+  } */
+}

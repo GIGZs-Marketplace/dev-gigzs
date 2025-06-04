@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase'; // Adjust path if necessary
-import TermsModal from '../components/TermsModal';
 
 // Define a type for the answers
 interface QuestionnairePageProps {
@@ -23,8 +22,8 @@ const QuestionnairePage: React.FC<QuestionnairePageProps> = ({ userId, onComplet
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatusMessage, setSubmitStatusMessage] = useState<string | null>(null);
   const [submitStatusType, setSubmitStatusType] = useState<'success' | 'error' | null>(null);
-  const [showTerms, setShowTerms] = useState(true);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  // const [showTerms, setShowTerms] = useState(false); // Terms modal removed
+  // const [termsAccepted, setTermsAccepted] = useState(true); // Terms modal removed
 
   // Load answers from localStorage on mount or when userId changes
   useEffect(() => {
@@ -81,17 +80,8 @@ const QuestionnairePage: React.FC<QuestionnairePageProps> = ({ userId, onComplet
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleTermsAccept = () => {
-    setTermsAccepted(true);
-    setShowTerms(false);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!termsAccepted) {
-      setShowTerms(true);
-      return;
-    }
     if (!validateForm()) return;
     setIsSubmitting(true);
     setErrors({}); // Clear previous errors
@@ -327,11 +317,6 @@ const QuestionnairePage: React.FC<QuestionnairePageProps> = ({ userId, onComplet
         </ul>
         <p style={styles.paragraph}>This test is not scored by right or wrong answers — it helps us understand if you're the right fit for high-value, long-term gigs on Gigzs.</p>
       </div>
-      <TermsModal
-        open={showTerms}
-        onClose={() => setShowTerms(false)}
-        onAccept={handleTermsAccept}
-      />
       <form onSubmit={handleSubmit}>
         <h2 style={styles.h2Style}>Multiple Choice Questions</h2>
 
